@@ -1,0 +1,209 @@
+<script lang="ts">
+	import { page } from '$app/state';
+	import { goto } from '$app/navigation';
+	import { useLiveQuery, eq } from '@tanstack/svelte-db';
+	import {
+		announcements,
+		courses,
+		courseWork,
+		materials,
+		submissions,
+		topics
+	} from '#lib/db/collections.ts';
+	import { summarize } from '#lib/work.ts';
+	import * as Tabs from '#lib/components/ui/tabs/index.js';
+	import UserAvatar from '#lib/components/user-avatar.svelte';
+	import * as Item from '#lib/components/ui/item/index.js';
+	import * as Empty from '#lib/components/ui/empty/index.js';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import WorkItem from '#lib/components/work-item.svelte';
+	import Announcement from '#lib/components/announcement.svelte';
+	import { courseColor, courseLabel, displayName, formatRelative, pluralize } from '#lib/format.ts';
+	import ExternalLinkIcon from '@lucide/svelte/icons/external-link';
+	import BookOpenIcon from '@lucide/svelte/icons/book-open';
+	import InboxIcon from '@lucide/svelte/icons/inbox';
+
+	const courseQuery = useLiveQuery({
+		query: (q) =>
+			q
+				.from({ c: courses })
+				.where(({ c }) => eq(c.id, page.params.id))
+				.findOne()
+	});
+	const workQuery = useLiveQuery({
+		query: (q) =>
+			q
+				.from({ w: courseWork })
+				.where(({ w }) => eq(w.courseId, page.params.id))
+				.leftJoin({ s: submissions }, ({ w, s }) => eq(w.id, s.courseWorkId))
+	});
+	const materialQuery = useLiveQuery({
+		query: (q) => q.from({ m: materials }).where(({ m }) => eq(m.courseId, page.params.id))
+	});
+	const topicQuery = useLiveQuery({
+		query: (q) =>
+			q
+				.from({ t: topics })
+				.where(({ t }) => eq(t.courseId, page.params.id))
+				.orderBy(({ t }) => t.name, 'asc')
+	});
+	const streamQuery = useLiveQuery({
+		query: (q) =>
+			q
+				.from({ a: announcements })
+				.where(({ a }) => eq(a.courseId, page.params.id))
+				.orderBy(({ a }) => a.updatedAt, 'desc')
+	});
+
+	const course = $derived(courseQuery.data);
+	const description = $derived(courseLabel(course?.description));
+	const work = $derived(
+		course ? workQuery.data.map((r) => summarize(r.w, r.s ?? undefined, displayName(course))) : []
+	);
+
+	let tab = $state(page.url.searchParams.get('tab') ?? 'classwork');
+	function setTab(value: string) {
+		tab = value;
+		const url = new URL(page.url.href);
+		if (value === 'classwork') url.searchParams.delete('tab');
+		else url.searchParams.set('tab', value);
+		goto(url, { replace: true, shallow: true });
+	}
+
+	type Entry =
+		| { kind: 'work'; at: number; item: (typeof work)[number] }
+		| { kind: 'material'; at: number; item: (typeof materialQuery.data)[number] };
+	const sections = $derived.by(() => {
+		const entries: Entry[] = [
+			...work.map((w) => ({ kind: 'work' as const, at: w.dueAt ?? w.updatedAt, item: w })),
+			...materialQuery.data.map((m) => ({ kind: 'material' as const, at: m.updatedAt, item: m }))
+		];
+		const byTopic = new Map<string | undefined, Entry[]>();
+		for (const e of entries)
+			byTopic.set(e.item.topicId, [...(byTopic.get(e.item.topicId) ?? []), e]);
+		const list = [
+			...topicQuery.data.map((t) => ({ id: t.id as string | undefined, name: t.name })),
+			{ id: undefined, name: 'No topic' }
+		];
+		return list
+			.map((t) => ({ ...t, entries: (byTopic.get(t.id) ?? []).sort((a, b) => b.at - a.at) }))
+			.filter((t) => t.entries.length);
+	});
+	const openCount = $derived(
+		work.filter((w) => w.status === 'assigned' || w.status === 'missing').length
+	);
+</script>
+
+{#if course}
+	<div class="flex flex-wrap items-start justify-between gap-4">
+		<div class="min-w-0">
+			<div class="flex items-center gap-2">
+				<span class={`size-2.5 rounded-full ${courseColor(course.id)}`}></span>
+				<h1 class="text-2xl font-semibold tracking-tight text-balance">{displayName(course)}</h1>
+			</div>
+			<p class="mt-1 text-sm text-muted-foreground">
+				{[course.nickname ? course.name : undefined, courseLabel(course.section), course.room]
+					.filter(Boolean)
+					.join(' · ')}{#if openCount}
+					· {pluralize(openCount, 'open assignment')}{/if}
+			</p>
+		</div>
+		{#if course.alternateLink}
+			<Button
+				variant="outline"
+				size="sm"
+				href={course.alternateLink}
+				target="_blank"
+				rel="noreferrer"
+			>
+				Open in Classroom <ExternalLinkIcon data-icon="inline-end" />
+			</Button>
+		{/if}
+	</div>
+
+	<Tabs.Root value={tab} onValueChange={setTab} class="mt-6">
+		<Tabs.List variant="line">
+			<Tabs.Trigger value="classwork">Classwork</Tabs.Trigger>
+			<Tabs.Trigger value="stream">Stream</Tabs.Trigger>
+			<Tabs.Trigger value="people">People</Tabs.Trigger>
+		</Tabs.List>
+		<Tabs.Content value="classwork" class="mt-4">
+			{#if sections.length === 0}
+				<Empty.Root class="border border-dashed">
+					<Empty.Header>
+						<Empty.Media variant="icon"><InboxIcon /></Empty.Media>
+						<Empty.Title>No classwork yet</Empty.Title>
+						<Empty.Description
+							>Assignments and materials will appear here after the next sync.</Empty.Description
+						>
+					</Empty.Header>
+				</Empty.Root>
+			{:else}
+				<div class="divide-y divide-border/60">
+					{#each sections as section (section.id ?? 'none')}
+						<section class="py-5">
+							<h2 class="text-base font-semibold tracking-tight">{section.name}</h2>
+							<div class="mt-1 flex flex-col">
+								{#each section.entries as entry (entry.kind + entry.item.id)}
+									{#if entry.kind === 'work'}
+										<WorkItem work={entry.item} showCourse={false} />
+									{:else}
+										<Item.Root size="sm" class="-mx-3">
+											{#snippet child({ props })}
+												<a href={`/courses/${course.id}/material/${entry.item.id}`} {...props}>
+													<Item.Media variant="icon" class="text-muted-foreground"
+														><BookOpenIcon /></Item.Media
+													>
+													<Item.Content>
+														<Item.Title class="line-clamp-1">{entry.item.title}</Item.Title>
+														<Item.Description
+															>Material · {pluralize(entry.item.materials.length, 'attachment')} · {formatRelative(
+																entry.item.updatedAt
+															)}</Item.Description
+														>
+													</Item.Content>
+												</a>
+											{/snippet}
+										</Item.Root>
+									{/if}
+								{/each}
+							</div>
+						</section>
+					{/each}
+				</div>
+			{/if}
+		</Tabs.Content>
+		<Tabs.Content value="stream" class="mt-2 divide-y divide-border/60">
+			{#each streamQuery.data as item (item.id)}
+				<Announcement {item} {course} showCourse={false} />
+			{:else}
+				<p class="py-6 text-sm text-muted-foreground">No announcements in this course.</p>
+			{/each}
+		</Tabs.Content>
+		<Tabs.Content value="people" class="mt-4">
+			<h2 class="text-base font-semibold tracking-tight">Teachers</h2>
+			<ul role="list" class="mt-2 divide-y divide-border/60">
+				{#each course.teachers as t (t.userId)}
+					<li class="flex items-center gap-3 py-3">
+						<UserAvatar src={t.photoUrl} name={t.name} class="size-9" fallbackClass="text-xs" />
+						<div class="min-w-0">
+							<p class="text-sm font-medium">{t.name ?? 'Teacher'}</p>
+							{#if t.email}<a
+									href={`mailto:${t.email}`}
+									class="text-sm text-muted-foreground hover:text-foreground">{t.email}</a
+								>{/if}
+						</div>
+					</li>
+				{/each}
+			</ul>
+			{#if description}
+				<h2 class="mt-8 text-base font-semibold tracking-tight">
+					{course.descriptionHeading || 'About'}
+				</h2>
+				<p class="mt-2 text-sm text-pretty whitespace-pre-wrap text-muted-foreground">
+					{description}
+				</p>
+			{/if}
+		</Tabs.Content>
+	</Tabs.Root>
+{/if}
