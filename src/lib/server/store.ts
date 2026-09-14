@@ -99,6 +99,20 @@ export function setPostExtras<K extends RichTable>(
 	return { type: 'update', key: row.id, value: next };
 }
 
+export function setCourseStudents(
+	courseId: string,
+	students: Author[],
+	studentCount: number
+): Change<Course> | null {
+	const row = db().query('SELECT id, data FROM courses WHERE id = ?').get(courseId) as Row | null;
+	if (!row) return null;
+	const prev = JSON.parse(row.data) as Course;
+	const next: Course = { ...prev, students, studentCount };
+	if (stable(prev) === stable(next)) return null;
+	db().query('UPDATE courses SET data = ? WHERE id = ?').run(JSON.stringify(next), courseId);
+	return { type: 'update', key: courseId, value: next };
+}
+
 export type WebProfiles = Record<string, Author>;
 
 export const getWebProfiles = () => getMeta<WebProfiles>('webProfiles') ?? {};

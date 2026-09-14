@@ -237,6 +237,27 @@
 					</li>
 				{/each}
 			</ul>
+			{#if course.students?.length}
+				<h2 class="mt-8 text-base font-semibold tracking-tight">
+					Classmates <span class="font-normal text-muted-foreground tabular-nums"
+						>· {course.studentCount ?? course.students.length}</span
+					>
+				</h2>
+				<ul role="list" class="mt-2 divide-y divide-border/60">
+					{#each course.students as s (s.email ?? s.name)}
+						<li class="flex items-center gap-3 py-2.5">
+							<UserAvatar src={s.photoUrl} name={s.name} class="size-8" fallbackClass="text-xs" />
+							<div class="min-w-0">
+								<p class="truncate text-sm font-medium">{s.name}</p>
+								{#if s.email}<a
+										href={`mailto:${s.email}`}
+										class="text-xs text-muted-foreground hover:text-foreground">{s.email}</a
+									>{/if}
+							</div>
+						</li>
+					{/each}
+				</ul>
+			{/if}
 			{#if description}
 				<h2 class="mt-8 text-base font-semibold tracking-tight">
 					{course.descriptionHeading || 'About'}

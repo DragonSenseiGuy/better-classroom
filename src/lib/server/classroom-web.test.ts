@@ -4,6 +4,7 @@ import {
 	buildStreamArgs,
 	encodeCourseId,
 	mergeCookies,
+	parseMembersPayload,
 	parseProfilesPayload,
 	parseStreamResponse
 } from './classroom-web.ts';
@@ -16,6 +17,17 @@ test('merges rotated cookies and drops expired ones', () => {
 			'NEW=x; Domain=.google.com'
 		])
 	).toBe('SID=a; SIDCC=new; NEW=x');
+});
+
+test('course members come from the keyed record', () => {
+	expect(
+		parseMembersPayload([
+			'hrq.crs',
+			null,
+			[[['805'], null, 1789380345319, { '8': [['s1'], ['s2']], '22': [['t1']], '53': true }]]
+		])
+	).toEqual({ students: ['s1', 's2'], teachers: ['t1'] });
+	expect(parseMembersPayload(['hrq.crs', null, []])).toEqual({ students: [], teachers: [] });
 });
 
 test('profile args and parsing', () => {

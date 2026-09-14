@@ -25,6 +25,8 @@ export type Course = {
 	updatedAt: number;
 	teachers: Teacher[];
 	people?: Teacher[];
+	students?: Author[];
+	studentCount?: number;
 	archived: boolean;
 	lastSyncedAt?: number;
 	nickname?: string;

@@ -1,5 +1,6 @@
 import {
 	SessionError,
+	fetchCourseMembers,
 	fetchProfiles,
 	fetchStreamPage,
 	loadTokens,
@@ -21,6 +22,7 @@ import {
 	saveRichStatus,
 	saveWebProfiles,
 	saveWebSession,
+	setCourseStudents,
 	setPostExtras,
 	type WebSession
 } from './store';
@@ -123,6 +125,18 @@ async function applyStreamItems(ctx: Ctx, items: StreamItem[]) {
 	return updated;
 }
 
+async function syncClassmates(ctx: Ctx, courseId: string) {
+	const members = await fetchCourseMembers(ctx.jar, ctx.session.authuser, ctx.tokens, courseId);
+	await resolveAuthors(ctx, [...members.students, ...members.teachers]);
+	const students = members.students
+		.map((id) => ctx.profiles[id])
+		.filter((p): p is Author => Boolean(p && p.name))
+		.sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''));
+	const change = setCourseStudents(courseId, students, members.students.length);
+	if (change) ctx.publish('courses', [change]);
+	return Boolean(change);
+}
+
 export async function syncRichText(
 	options: { full?: boolean },
 	publish: Publish
@@ -153,6 +167,10 @@ async function walk(session: WebSession, full: boolean, publish: Publish): Promi
 		let token: string | undefined;
 		let page = 0;
 		try {
+			if (full || course.students === undefined) {
+				const changed = await syncClassmates(ctx, course.id);
+				if (changed) updated++;
+			}
 			do {
 				let result;
 				try {

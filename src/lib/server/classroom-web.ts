@@ -92,6 +92,50 @@ export function buildStreamArgs(courseId: string, pageSize: number, token?: stri
 	return `[[${pageSize},${token ? JSON.stringify(token) : 'null'},1,0],${FIELD_MASK},[[[2,3],[[${courseId}]],null,[2]]]]`;
 }
 
+const COURSE_RPC = 'gXtzob';
+
+export function buildMembersArgs(courseId: string): string {
+	return `[[null,null,1,0],[null,1,null,null,null,null,1,null,null,null,null,null,null,null,null,null,null,1,null,null,null,null,1,null,null,null,null,null,null,null,null,1,1,null,null,null,null,null,null,null,null,[1,null,1,1,1,1,1,0,0,1],null,null,null,null,null,null,null,null,null,1,1],[null,[[${courseId}]],null,null,null,null,[1,2]]]`;
+}
+
+export type CourseMembers = { students: string[]; teachers: string[] };
+
+export async function fetchCourseMembers(
+	jar: CookieJar,
+	authuser: number,
+	tokens: WebTokens,
+	courseId: string
+): Promise<CourseMembers> {
+	const payload = await callRpc(
+		jar,
+		authuser,
+		tokens,
+		COURSE_RPC,
+		buildMembersArgs(courseId),
+		`/u/${authuser}/r/${encodeCourseId(courseId)}/sort-last-name`
+	);
+	return parseMembersPayload(payload);
+}
+
+export function parseMembersPayload(payload: Json): CourseMembers {
+	const out: CourseMembers = { students: [], teachers: [] };
+	if (!Array.isArray(payload) || !Array.isArray(payload[2])) return out;
+	const record = payload[2][0];
+	if (!Array.isArray(record)) return out;
+	const box = record[3];
+	if (!box || typeof box !== 'object' || Array.isArray(box)) return out;
+	const ids = (v: unknown) =>
+		Array.isArray(v)
+			? v
+					.filter((x): x is string[] => Array.isArray(x) && typeof x[0] === 'string')
+					.map((x) => x[0])
+			: [];
+	const fields = box as Record<string, unknown>;
+	out.students = ids(fields['8']);
+	out.teachers = ids(fields['22']);
+	return out;
+}
+
 export function buildProfileArgs(ids: string[]): string {
 	const list = ids.map((id) => `[null,[${id}]]`).join(',');
 	return `[[null,null,1,0],[1,1,null,1,null,1,null,null,1,1,1,1,null,null,1],[[null,[${list}]]]]`;
@@ -124,7 +168,7 @@ export async function loadTokens(jar: CookieJar, authuser: number): Promise<WebT
 	return { at, fsid, bl, email };
 }
 
-type Json = null | boolean | number | string | Json[];
+type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 
 async function callRpc(
 	jar: CookieJar,
