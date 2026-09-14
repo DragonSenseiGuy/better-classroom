@@ -20,12 +20,50 @@ export type Theme = {
 	name: string;
 	family: string;
 	mode: Mode;
-	palette?: Palette;
+	palette: Palette;
 };
 
 export const THEMES = [
-	{ id: 'light', name: 'Light', family: 'Default', mode: 'light', palette: undefined },
-	{ id: 'dark', name: 'Dark', family: 'Default', mode: 'dark', palette: undefined },
+	{
+		id: 'light',
+		name: 'Default',
+		family: 'Default',
+		mode: 'light',
+		palette: {
+			bg: '#ffffff',
+			card: '#ffffff',
+			popover: '#ffffff',
+			sidebar: '#fafafa',
+			raised: '#f4f4f5',
+			border: '#e4e4e7',
+			text: '#18181b',
+			subtle: '#71717a',
+			primary: '#27272a',
+			onPrimary: '#fafafa',
+			destructive: '#dc2626',
+			chart: ['#d4d4d8', '#71717a', '#52525b', '#3f3f46', '#27272a']
+		}
+	},
+	{
+		id: 'dark',
+		name: 'Default',
+		family: 'Default',
+		mode: 'dark',
+		palette: {
+			bg: '#18181b',
+			card: '#27272a',
+			popover: '#27272a',
+			sidebar: '#27272a',
+			raised: '#3f3f46',
+			border: '#3f3f46',
+			text: '#fafafa',
+			subtle: '#a1a1aa',
+			primary: '#e4e4e7',
+			onPrimary: '#27272a',
+			destructive: '#ef4444',
+			chart: ['#d4d4d8', '#71717a', '#52525b', '#3f3f46', '#27272a']
+		}
+	},
 	{
 		id: 'catppuccin-latte',
 		name: 'Latte',
@@ -313,10 +351,12 @@ export type ThemeChoice = ThemeId | 'system';
 
 export const THEME_BY_ID: ReadonlyMap<string, Theme> = new Map(THEMES.map((t) => [t.id, t]));
 
-export const THEME_FAMILIES = [...new Set(THEMES.map((t) => t.family))].map((family) => ({
-	family,
-	themes: THEMES.filter((t) => t.family === family)
-}));
+export const LIGHT_THEMES = THEMES.filter((t) => t.mode === 'light');
+export const DARK_THEMES = THEMES.filter((t) => t.mode === 'dark');
+
+export function themeLabel(t: Theme) {
+	return t.family === t.name || t.family === 'Default' ? t.name : `${t.family} ${t.name}`;
+}
 
 export function isThemeId(value: unknown): value is ThemeId {
 	return typeof value === 'string' && THEME_BY_ID.has(value);
@@ -360,6 +400,6 @@ function vars(p: Palette) {
 		.join(';');
 }
 
-export const themeCss = THEMES.filter((t) => t.palette)
-	.map((t) => `html[data-theme="${t.id}"][data-mode]{${vars(t.palette!)}}`)
+export const themeCss = THEMES.filter((t) => t.family !== 'Default')
+	.map((t) => `html[data-theme="${t.id}"][data-mode]{${vars(t.palette)}}`)
 	.join('\n');

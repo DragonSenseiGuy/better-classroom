@@ -85,8 +85,8 @@
 		if (!sync) return;
 		const prev = lastStatus;
 		lastStatus = sync.status;
-		if (prev !== 'running' || sync.status === 'running') return;
-		else notify('rose', 'Sync failed', { description: sync.error?.split('\n')[0], duration: 8000 });
+		if (prev !== 'running' || sync.status !== 'error') return;
+		notify('rose', 'Sync failed', { description: sync.error?.split('\n')[0], duration: 8000 });
 	});
 </script>
 

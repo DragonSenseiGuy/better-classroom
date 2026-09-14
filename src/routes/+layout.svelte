@@ -21,4 +21,4 @@
 
 {@render children()}
 
-<Toaster position="bottom-right" closeButton theme={theme.mode} />
+<Toaster position="bottom-right" closeButton theme={theme.resolved} />

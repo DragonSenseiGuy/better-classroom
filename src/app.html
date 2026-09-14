@@ -9,14 +9,15 @@
 		<script>
 			try {
 				var d = document.documentElement;
-				var t = localStorage.getItem('theme');
-				var m = localStorage.getItem('theme-mode');
-				if (t && m) {
-					d.dataset.theme = t;
-					d.dataset.mode = m;
-				} else {
-					d.dataset.mode = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-				}
+				var pref = localStorage.getItem('theme.mode');
+				var mode =
+					pref === 'light' || pref === 'dark'
+						? pref
+						: matchMedia('(prefers-color-scheme: dark)').matches
+							? 'dark'
+							: 'light';
+				d.dataset.mode = mode;
+				d.dataset.theme = localStorage.getItem('theme.' + mode) || mode;
 			} catch (e) {}
 		</script>
 		%sveltekit.head%
