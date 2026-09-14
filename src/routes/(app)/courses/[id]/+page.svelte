@@ -18,10 +18,18 @@
 	import { Button } from '#lib/components/ui/button/index.js';
 	import WorkItem from '#lib/components/work-item.svelte';
 	import Announcement from '#lib/components/announcement.svelte';
-	import { courseColor, courseLabel, displayName, formatRelative, pluralize } from '#lib/format.ts';
+	import {
+		courseColor,
+		courseLabel,
+		displayName,
+		formatDue,
+		formatRelative,
+		pluralize
+	} from '#lib/format.ts';
 	import ExternalLinkIcon from '@lucide/svelte/icons/external-link';
 	import BookOpenIcon from '@lucide/svelte/icons/book-open';
 	import InboxIcon from '@lucide/svelte/icons/inbox';
+	import PercentIcon from '@lucide/svelte/icons/percent';
 
 	const courseQuery = useLiveQuery({
 		query: (q) =>
@@ -102,6 +110,22 @@
 	});
 	const openCount = $derived(work.filter(isOpen).length);
 
+	const graded = $derived(
+		work
+			.filter((w) => w.assignedGrade !== undefined)
+			.sort((a, b) => (b.dueAt ?? b.updatedAt) - (a.dueAt ?? a.updatedAt))
+	);
+	const gradeTotals = $derived.by(() => {
+		const scored = graded.filter((w) => w.maxPoints);
+		const earned = scored.reduce((n, w) => n + (w.assignedGrade ?? 0), 0);
+		const possible = scored.reduce((n, w) => n + (w.maxPoints ?? 0), 0);
+		return { earned, possible, percent: possible ? Math.round((earned / possible) * 100) : null };
+	});
+	const percent = (w: { assignedGrade?: number; maxPoints?: number }) =>
+		w.maxPoints && w.assignedGrade !== undefined
+			? Math.round((w.assignedGrade / w.maxPoints) * 100)
+			: null;
+
 	$effect(() => {
 		const hash = page.url.hash;
 		if (!hash || streamQuery.data.length === 0) return;
@@ -142,6 +166,7 @@
 			<Tabs.Trigger value="classwork">Classwork</Tabs.Trigger>
 			<Tabs.Trigger value="stream">Stream</Tabs.Trigger>
 			<Tabs.Trigger value="people">People</Tabs.Trigger>
+			<Tabs.Trigger value="grades">Grades</Tabs.Trigger>
 		</Tabs.List>
 		<Tabs.Content value="classwork" class="mt-4">
 			{#if sections.length === 0}
@@ -219,6 +244,60 @@
 				<p class="mt-2 text-sm text-pretty whitespace-pre-wrap text-muted-foreground">
 					{description}
 				</p>
+			{/if}
+		</Tabs.Content>
+		<Tabs.Content value="grades" class="mt-4">
+			{#if graded.length === 0}
+				<Empty.Root class="border border-dashed">
+					<Empty.Header>
+						<Empty.Media variant="icon"><PercentIcon /></Empty.Media>
+						<Empty.Title>Nothing graded yet</Empty.Title>
+						<Empty.Description>Returned work with a grade will be listed here.</Empty.Description>
+					</Empty.Header>
+				</Empty.Root>
+			{:else}
+				<div class="flex flex-wrap items-baseline justify-between gap-2">
+					<h2 class="text-base font-semibold tracking-tight">
+						{pluralize(graded.length, 'graded assignment')}
+					</h2>
+					{#if gradeTotals.percent !== null}
+						<p class="text-sm text-muted-foreground tabular-nums">
+							Overall <span class="font-medium text-foreground">{gradeTotals.percent}%</span>
+							· {gradeTotals.earned}/{gradeTotals.possible} points
+						</p>
+					{/if}
+				</div>
+				<ul role="list" class="mt-2 divide-y divide-border/60">
+					{#each graded as w (w.id)}
+						{@const pct = percent(w)}
+						<li>
+							<a
+								href={`/courses/${course.id}/work/${w.id}`}
+								class="-mx-3 flex items-center gap-4 rounded-lg px-3 py-3 hover:bg-accent/60"
+							>
+								<div class="min-w-0 flex-1">
+									<p class="truncate text-sm font-medium">{w.title}</p>
+									<p class="text-xs text-muted-foreground tabular-nums">
+										{w.dueAt !== undefined
+											? formatDue(w.dueAt, w.hasDueTime)
+											: 'No due date'}{#if w.late}
+											· late{/if}
+									</p>
+								</div>
+								<div class="w-24 shrink-0 text-right text-sm tabular-nums">
+									<span class="font-medium">{w.assignedGrade}</span>{#if w.maxPoints}<span
+											class="text-muted-foreground">/{w.maxPoints}</span
+										>{/if}
+								</div>
+								{#if pct !== null}
+									<div class="w-16 shrink-0 text-right text-sm text-muted-foreground tabular-nums">
+										{pct}%
+									</div>
+								{/if}
+							</a>
+						</li>
+					{/each}
+				</ul>
 			{/if}
 		</Tabs.Content>
 	</Tabs.Root>
