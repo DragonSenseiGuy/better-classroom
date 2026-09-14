@@ -1,42 +1,22 @@
-# sv
+<div align="center"> 
+    <br/>
+    <h1>better classroom</h1>
+    <p>
+        <img src="https://cdn.mahadk.com/s/v3/9ebf8b105a1d662b_image.png" title="icon" alt="icon" width="100" />
+    </p>
+    <p>
+        a better frontend for google classroom
+        <br/>
+        <a href="https://mahadk.com">
+            made with <3 by skyfall
+        </a>
+    </p>
+    <!--<p>
+        <a href="https://testflight.apple.com/join/8aeqD8Q2">
+            testflight
+        </a>
+    </p>-->
+    <br/>
+</div>
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
-
-## Creating a project
-
-If you're seeing this, you've probably already done this step. Congrats!
-
-```sh
-# create a new project
-npx sv create my-app
-```
-
-To recreate this project with the same configuration:
-
-```sh
-# recreate this project
-bun x sv@1.0.0-next.7 create --template minimal --types ts --add tailwindcss="plugins:typography" prettier sveltekit-adapter="adapter:node" --no-download-check --install bun .
-```
-
-## Developing
-
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
-
-```sh
-npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
-```
-
-## Building
-
-To create a production version of your app:
-
-```sh
-npm run build
-```
-
-You can preview the production build with `npm run preview`.
-
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+![Screenshot of Better Classroom](.github/readme/hero-screenshot.png)
