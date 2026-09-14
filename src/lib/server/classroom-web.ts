@@ -1,3 +1,12 @@
+import { decode, type Json } from './classroom/proto';
+import {
+	MEMBERS,
+	PostItem,
+	ProfileEntry,
+	ProfilesEnvelope,
+	StreamEnvelope
+} from './classroom/schema';
+
 const ORIGIN = 'https://classroom.google.com';
 const STREAM_RPC = 'pONvgf';
 const PROFILE_RPC = 'UG41I';
@@ -131,8 +140,8 @@ export function parseMembersPayload(payload: Json): CourseMembers {
 					.map((x) => x[0])
 			: [];
 	const fields = box as Record<string, unknown>;
-	out.students = ids(fields['8']);
-	out.teachers = ids(fields['22']);
+	out.students = ids(fields[MEMBERS.students]);
+	out.teachers = ids(fields[MEMBERS.teachers]);
 	return out;
 }
 
@@ -167,8 +176,6 @@ export async function loadTokens(jar: CookieJar, authuser: number): Promise<WebT
 	const email = wiz.match(/"([\w.+-]+@[\w-]+(?:\.[\w-]+)+)"/)?.[1];
 	return { at, fsid, bl, email };
 }
-
-type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 
 async function callRpc(
 	jar: CookieJar,
@@ -281,43 +288,42 @@ export const parseStreamResponse = (text: string) =>
 	parseStreamPayload(extractPayload(text, STREAM_RPC));
 
 export function parseStreamPayload(payload: Json): StreamPage {
-	if (!Array.isArray(payload)) throw new Error('Classroom stream payload is not a list');
-	const flag = payload[1];
-	const hasMore = Array.isArray(flag) && flag[0] === true;
-	const tokenBox = Array.isArray(flag) ? flag[1] : undefined;
-	const token =
-		Array.isArray(tokenBox) && typeof tokenBox[0] === 'string' ? tokenBox[0] : undefined;
-	const entries = Array.isArray(payload[2]) ? payload[2] : [];
+	const env = decode(payload, StreamEnvelope);
+	if (!env) throw new Error('Classroom stream payload is not a list');
 	const items: StreamItem[] = [];
-	for (const entry of entries) {
-		const item = findItem(entry);
-		if (!item) continue;
-		const key = item[0] as Json[];
-		const course = key[1];
-		const courseId = Array.isArray(course) && typeof course[0] === 'string' ? course[0] : '';
-		const creator = item[4];
-		const creatorId =
-			Array.isArray(creator) && typeof creator[0] === 'string' ? creator[0] : undefined;
-		const rich = findRichText(item);
-		if (!rich) continue;
-		items.push({ id: key[0] as string, courseId, text: rich.text, html: rich.html, creatorId });
+	for (const entry of env.entries ?? []) {
+		const located = findItem(entry as Json);
+		if (!located) continue;
+		const item = decode(located, PostItem);
+		const rich = findRichText(located);
+		if (!item?.key || !rich) continue;
+		items.push({
+			id: item.key.id,
+			courseId: item.key.course?.id ?? '',
+			text: rich.text,
+			html: rich.html,
+			creatorId: item.creator?.id
+		});
 	}
-	return { items, hasMore, token };
+	return {
+		items,
+		hasMore: env.paging?.hasMore ?? false,
+		token: env.paging?.token
+	};
 }
 
 export function parseProfilesPayload(payload: Json): WebProfile[] {
-	if (!Array.isArray(payload) || !Array.isArray(payload[2])) return [];
+	const env = decode(payload, ProfilesEnvelope);
+	if (!env) return [];
 	const out: WebProfile[] = [];
-	for (const entry of payload[2]) {
-		if (!Array.isArray(entry)) continue;
-		const key = entry[0];
-		if (!Array.isArray(key) || typeof key[0] !== 'string') continue;
-		const str = (v: Json) => (typeof v === 'string' && v ? v : undefined);
-		const photo = str(entry[4]);
+	for (const raw of env.entries) {
+		const p = decode(raw as Json, ProfileEntry);
+		if (!p?.key) continue;
+		const photo = p.photoUrl;
 		out.push({
-			id: key[0],
-			name: str(entry[1]),
-			email: str(entry[2]),
+			id: p.key.id,
+			name: p.name || undefined,
+			email: p.email || undefined,
 			photoUrl: photo ? (photo.startsWith('//') ? `https:${photo}` : photo) : undefined
 		});
 	}
