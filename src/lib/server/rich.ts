@@ -1,54 +1,125 @@
 import {
 	SessionError,
+	fetchProfiles,
 	fetchStreamPage,
 	loadTokens,
+	rotateSession,
+	type CookieJar,
 	type RawCapture,
 	type StreamItem,
 	type WebTokens
 } from './classroom-web';
+import { warmAvatars } from './avatars';
 import {
 	findPost,
 	getProfile,
 	getRichStatus,
+	getWebProfiles,
 	getWebSession,
 	listAll,
 	listByCourse,
 	saveRichStatus,
-	setPostHtml,
+	saveWebProfiles,
+	saveWebSession,
+	setPostExtras,
 	type WebSession
 } from './store';
-import type { Change, CollectionName, RichStatus } from '#lib/shared/types.ts';
+import type { Author, Change, CollectionName, RichStatus } from '#lib/shared/types.ts';
 
 const PAGE_SIZE = 50;
 const MAX_PAGES = 60;
 const TOKEN_TTL = 20 * 60_000;
+const PROFILE_BATCH = 25;
 
 let cached: { key: string; tokens: WebTokens; at: number } | null = null;
 
-async function tokensFor(session: WebSession, fresh = false) {
-	const key = `${session.authuser}:${session.cookie.length}:${session.savedAt}`;
+function jarFor(session: WebSession): CookieJar {
+	return {
+		cookie: session.cookie,
+		onChange: (cookie) => saveWebSession({ ...session, cookie })
+	};
+}
+
+async function tokensFor(session: WebSession, jar: CookieJar, fresh = false) {
+	const key = `${session.authuser}:${session.savedAt}`;
 	if (!fresh && cached && cached.key === key && Date.now() - cached.at < TOKEN_TTL)
 		return cached.tokens;
-	const tokens = await loadTokens(session.cookie, session.authuser);
+	await keepAlive(jar);
+	const tokens = await loadTokens(jar, session.authuser);
 	cached = { key, tokens, at: Date.now() };
 	return tokens;
 }
 
+const ROTATE_EVERY = 5 * 60_000;
+let lastRotate = 0;
+
+async function keepAlive(jar: CookieJar) {
+	if (Date.now() - lastRotate < ROTATE_EVERY) return;
+	await rotateSession(jar);
+	lastRotate = Date.now();
+}
+
+export async function rotateSavedSession(): Promise<RichStatus | null> {
+	const session = getWebSession();
+	if (!session) return null;
+	const previous = getRichStatus();
+	if (previous && !previous.ok && previous.expired && previous.sessionSavedAt === session.savedAt)
+		return previous;
+	try {
+		await rotateSession(jarFor(session));
+		lastRotate = Date.now();
+		return previous;
+	} catch (err) {
+		const status = failure(err, session);
+		if (status.expired) saveRichStatus(status);
+		return status;
+	}
+}
+
 export type Publish = (collection: CollectionName, changes: Change[]) => void;
 
-export function applyStreamItems(items: StreamItem[], publish: Publish) {
+type Ctx = {
+	session: WebSession;
+	jar: CookieJar;
+	tokens: WebTokens;
+	profiles: Record<string, Author>;
+	publish: Publish;
+};
+
+async function resolveAuthors(ctx: Ctx, ids: string[]) {
+	const missing = [...new Set(ids)].filter((id) => !(id in ctx.profiles));
+	for (let i = 0; i < missing.length; i += PROFILE_BATCH) {
+		const batch = missing.slice(i, i + PROFILE_BATCH);
+		const found = await fetchProfiles(ctx.jar, ctx.session.authuser, ctx.tokens, batch);
+		for (const p of found)
+			ctx.profiles[p.id] = { name: p.name, email: p.email, photoUrl: p.photoUrl };
+		for (const id of batch) ctx.profiles[id] ??= {};
+		void warmAvatars(found.map((p) => p.photoUrl));
+	}
+	if (missing.length) saveWebProfiles(ctx.profiles);
+}
+
+async function applyStreamItems(ctx: Ctx, items: StreamItem[]) {
+	await resolveAuthors(
+		ctx,
+		items.map((i) => i.creatorId).filter((id): id is string => Boolean(id))
+	);
 	const grouped: Record<string, Change[]> = {};
 	let updated = 0;
 	for (const item of items) {
-		if (!item.html) continue;
 		const found = findPost(item.id);
 		if (!found) continue;
-		const change = setPostHtml(found.table, found.row, item.html);
+		const author = item.creatorId ? ctx.profiles[item.creatorId] : undefined;
+		const change = setPostExtras(found.table, found.row, {
+			html: item.html,
+			author: author && author.name ? author : undefined
+		});
 		if (!change) continue;
 		(grouped[found.table] ??= []).push(change);
 		updated++;
 	}
-	for (const [table, changes] of Object.entries(grouped)) publish(table as CollectionName, changes);
+	for (const [table, changes] of Object.entries(grouped))
+		ctx.publish(table as CollectionName, changes);
 	return updated;
 }
 
@@ -69,12 +140,14 @@ export async function syncRichText(
 async function walk(session: WebSession, full: boolean, publish: Publish): Promise<RichStatus> {
 	let updated = 0;
 	const errors: string[] = [];
+	const jar = jarFor(session);
 	let tokens: WebTokens;
 	try {
-		tokens = await tokensFor(session);
+		tokens = await tokensFor(session, jar);
 	} catch (err) {
 		return failure(err, session);
 	}
+	const ctx: Ctx = { session, jar, tokens, profiles: getWebProfiles(), publish };
 	const courses = listAll('courses').filter((c) => !c.archived);
 	for (const course of courses) {
 		let token: string | undefined;
@@ -84,27 +157,27 @@ async function walk(session: WebSession, full: boolean, publish: Publish): Promi
 				let result;
 				try {
 					result = await fetchStreamPage(
-						session.cookie,
+						jar,
 						session.authuser,
-						tokens,
+						ctx.tokens,
 						course.id,
 						PAGE_SIZE,
 						token
 					);
 				} catch (err) {
 					if (err instanceof SessionError && page === 0 && course === courses[0]) {
-						tokens = await tokensFor(session, true);
+						ctx.tokens = await tokensFor(session, jar, true);
 						result = await fetchStreamPage(
-							session.cookie,
+							jar,
 							session.authuser,
-							tokens,
+							ctx.tokens,
 							course.id,
 							PAGE_SIZE,
 							token
 						);
 					} else throw err;
 				}
-				const changed = applyStreamItems(result.items, publish);
+				const changed = await applyStreamItems(ctx, result.items);
 				updated += changed;
 				token = result.hasMore ? result.token : undefined;
 				page++;
@@ -146,7 +219,7 @@ export type ProbeAttempt = {
 };
 
 export type ProbeResult =
-	| { ok: true; authuser: number; sample: number; attempts: ProbeAttempt[] }
+	| { ok: true; authuser: number; sample: number; cookie: string; attempts: ProbeAttempt[] }
 	| { ok: false; message: string; attempts: ProbeAttempt[] };
 
 export async function probeSession(cookie: string): Promise<ProbeResult> {
@@ -159,6 +232,7 @@ export async function probeSession(cookie: string): Promise<ProbeResult> {
 			attempts
 		};
 	const me = getProfile()?.email?.toLowerCase();
+	const jar: CookieJar = { cookie };
 	const sample = courses
 		.map((c) => ({ c, n: listByCourse('announcements', c.id).length }))
 		.sort((a, b) => b.n - a.n)
@@ -169,7 +243,7 @@ export async function probeSession(cookie: string): Promise<ProbeResult> {
 		attempts.push(attempt);
 		let tokens: WebTokens;
 		try {
-			tokens = await loadTokens(cookie, authuser);
+			tokens = await loadTokens(jar, authuser);
 		} catch (err) {
 			attempt.error = err instanceof Error ? err.message : String(err);
 			if (attempt.error.includes('redirected to')) break;
@@ -181,7 +255,7 @@ export async function probeSession(cookie: string): Promise<ProbeResult> {
 		for (const course of sample) {
 			const raw: RawCapture[] = [];
 			try {
-				const page = await fetchStreamPage(cookie, authuser, tokens, course.id, 10, undefined, raw);
+				const page = await fetchStreamPage(jar, authuser, tokens, course.id, 10, undefined, raw);
 				attempt.courses.push({
 					id: course.id,
 					name: course.name,
@@ -196,7 +270,7 @@ export async function probeSession(cookie: string): Promise<ProbeResult> {
 				break;
 			}
 		}
-		if (found > 0) return { ok: true, authuser, sample: found, attempts };
+		if (found > 0) return { ok: true, authuser, sample: found, cookie: jar.cookie, attempts };
 	}
 	const seen = attempts.filter((a) => a.email).map((a) => `/u/${a.authuser}/ = ${a.email}`);
 	return {

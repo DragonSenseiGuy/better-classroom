@@ -1,5 +1,6 @@
 import { db } from './db';
 import type {
+	Author,
 	Change,
 	CollectionName,
 	Course,
@@ -85,15 +86,25 @@ export function findPost(id: string): { table: RichTable; row: RowOf[RichTable] 
 	return null;
 }
 
-export function setPostHtml<K extends RichTable>(
+export function setPostExtras<K extends RichTable>(
 	table: K,
 	row: RowOf[K],
-	html: string
+	extras: { html?: string; author?: Author }
 ): Change<RowOf[K]> | null {
-	if (row.html === html) return null;
-	const next = { ...row, html };
+	const next = { ...row };
+	if (extras.html !== undefined) next.html = extras.html;
+	if (extras.author !== undefined) next.author = extras.author;
+	if (stable(next) === stable(row)) return null;
 	db().query(`UPDATE ${table} SET data = ? WHERE id = ?`).run(JSON.stringify(next), row.id);
 	return { type: 'update', key: row.id, value: next };
+}
+
+export type WebProfiles = Record<string, Author>;
+
+export const getWebProfiles = () => getMeta<WebProfiles>('webProfiles') ?? {};
+
+export function saveWebProfiles(profiles: WebProfiles) {
+	setMeta('webProfiles', profiles);
 }
 
 export function getProfile() {
@@ -140,14 +151,17 @@ export function snapshot(sync: SyncStatus): Snapshot {
 	};
 }
 
-type MaybeRich = { html?: string; updatedAt?: number };
+type MaybeRich = { html?: string; author?: Author; updatedAt?: number };
 
 function keepHtml<T>(prev: T | undefined, fresh: T): T {
 	const p = prev as MaybeRich | undefined;
 	const f = fresh as MaybeRich;
-	if (!p || p.html === undefined || f.html !== undefined || p.updatedAt !== f.updatedAt)
-		return fresh;
-	return { ...fresh, html: p.html };
+	if (!p) return fresh;
+	const out: MaybeRich = { ...f };
+	if (p.author !== undefined && f.author === undefined) out.author = p.author;
+	if (p.html !== undefined && f.html === undefined && p.updatedAt === f.updatedAt)
+		out.html = p.html;
+	return out as T;
 }
 
 function stable(value: unknown): string {

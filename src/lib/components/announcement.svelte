@@ -14,7 +14,8 @@
 	let expanded = $state(false);
 	const long = $derived(clamp && (item.text.length > 400 || item.text.split('\n').length > 6));
 	const author = $derived(
-		[...course.teachers, ...(course.people ?? [])].find((t) => t.userId === item.creatorUserId)
+		[...course.teachers, ...(course.people ?? [])].find((t) => t.userId === item.creatorUserId) ??
+			item.author
 	);
 </script>
 

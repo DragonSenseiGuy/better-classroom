@@ -11,7 +11,7 @@ import { fetchGoogle, isGoogleConnected } from './google';
 import { config, isConfigured } from './config';
 import { broadcast } from './events';
 import { rebuildSearchIndex } from './search';
-import { syncRichText } from './rich';
+import { rotateSavedSession, syncRichText } from './rich';
 import {
 	applyContent,
 	applyCourses,
@@ -367,9 +367,15 @@ function scheduleNext() {
 	}, minutes * 60_000);
 }
 
+const KEEP_ALIVE_MINUTES = 5;
+
 export function startScheduler() {
 	if (timer) return;
 	rebuildSearchIndex();
 	if (isConfigured()) void runSync().then(scheduleNext);
 	else scheduleNext();
+	setInterval(
+		() => void rotateSavedSession().catch((err) => console.error('cookie rotation failed', err)),
+		KEEP_ALIVE_MINUTES * 60_000
+	);
 }

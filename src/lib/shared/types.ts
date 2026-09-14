@@ -8,6 +8,8 @@ export type Attachment = {
 
 export type Teacher = { userId: string; name?: string; email?: string; photoUrl?: string };
 
+export type Author = { name?: string; email?: string; photoUrl?: string };
+
 export type Course = {
 	id: string;
 	name: string;
@@ -46,6 +48,7 @@ export type CourseWork = {
 	topicId?: string;
 	creatorUserId?: string;
 	html?: string;
+	author?: Author;
 };
 
 export type Material = {
@@ -60,6 +63,7 @@ export type Material = {
 	topicId?: string;
 	creatorUserId?: string;
 	html?: string;
+	author?: Author;
 };
 
 export type Announcement = {
@@ -72,6 +76,7 @@ export type Announcement = {
 	updatedAt: number;
 	creatorUserId?: string;
 	html?: string;
+	author?: Author;
 };
 
 export type RichStatus = {

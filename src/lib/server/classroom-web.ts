@@ -66,6 +66,25 @@ function absorb(jar: CookieJar, res: Response) {
 	jar.onChange?.(next);
 }
 
+export async function rotateSession(jar: CookieJar): Promise<boolean> {
+	const res = await fetch('https://accounts.google.com/RotateCookies', {
+		method: 'POST',
+		headers: { cookie: jar.cookie, 'user-agent': UA, 'content-type': 'application/json' },
+		body: '[000,"-0000000000000000000"]',
+		redirect: 'manual',
+		signal: AbortSignal.timeout(30_000)
+	});
+	const before = jar.cookie;
+	absorb(jar, res);
+	if (res.status >= 300 && res.status < 400) {
+		const to = res.headers.get('location') ?? '';
+		if (/accounts\.google\.com\/(ServiceLogin|v3\/signin)/.test(to))
+			throw new SessionError('Google asked for a sign-in.');
+	}
+	if (!res.ok && res.status !== 302) throw new Error(`RotateCookies responded ${res.status}`);
+	return jar.cookie !== before;
+}
+
 const FIELD_MASK =
 	'[[[1,1,1,1,1,null,null,[1,1,1,null,1,1,1],1,1,1,1,1,1,null,null,null,null,1,null,null,null,1,[1],1,[null,null,1,1,1,null,1]],[1,1,1,1,1,1,[1],1,null,[1,1],1,1,null,1,[[1,1,[],[null,1]],1,1],null,null,null,1],[null,1],null,[1,1]],[[1,1,1,1,1,null,null,[1,1,1,null,1,1,1],1,1,1,1,1,1,null,null,null,null,1,null,null,null,1,[1],1,[null,null,1,1,1,null,1]]],[[1,1,1,1,1,null,null,[1,1,1,null,1,1,1],1,1,1,1,1,1,null,null,null,null,1,null,null,null,1,[1],1,[null,null,1,1,1,null,1]],[1,1,1,1,1,1,[1],1,null,[1,1],1,1,null,1,[[1,1,[],[null,1]],1,1],null,null,null,1],[1]],null,null,[[1,1,1,1,1,null,null,[1,1,1,null,1,1,1],1,1,1,1,1,1,null,null,null,null,1,null,null,null,1,[1],1,[null,null,1,1,1,null,1]]]]';
 

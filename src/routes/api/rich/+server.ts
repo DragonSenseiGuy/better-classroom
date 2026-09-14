@@ -10,6 +10,7 @@ import {
 	setMeta
 } from '#lib/server/store.ts';
 import { runRichSync } from '#lib/server/sync.ts';
+import { db } from '#lib/server/db.ts';
 
 const summary = () => {
 	const session = getWebSession();
@@ -50,12 +51,13 @@ export const POST: RequestHandler = async ({ request }) => {
 		setMeta('webSessionDraft', cookie);
 	}
 	const result = await probeSession(cookie);
-	setMeta('richProbe', { at: Date.now(), ...result });
+	setMeta('richProbe', { at: Date.now(), ...result, cookie: undefined });
 	if (!result.ok) return json(result, { status: 400 });
-	saveWebSession({ cookie, authuser: result.authuser, savedAt: Date.now() });
+	saveWebSession({ cookie: result.cookie, authuser: result.authuser, savedAt: Date.now() });
+	db().query('DELETE FROM meta WHERE key = ?').run('webSessionDraft');
 	saveRichStatus({ ok: true, at: Date.now(), updated: 0 });
 	void runRichSync({ full: true });
-	return json({ ...result, ...summary() });
+	return json({ ...result, cookie: undefined, ...summary() });
 };
 
 export const DELETE: RequestHandler = () => {
