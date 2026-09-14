@@ -1,29 +1,53 @@
+const KEY = '';
 const SECRET_PROPERTY = 'CLASSROOM_SYNC_KEY';
 const CACHE_TTL = 6 * 60 * 60;
+const RETRIES = 3;
+const TRANSIENT =
+	/quota|rate ?limit|429|5\d\d|internal|backend|unavailable|timeout|timed out|try again/i;
 
 function doGet(e) {
 	const params = (e && e.parameter) || {};
-	const expected = PropertiesService.getScriptProperties().getProperty(SECRET_PROPERTY);
+	const expected = KEY || PropertiesService.getScriptProperties().getProperty(SECRET_PROPERTY);
 	if (!expected || params.key !== expected) return respond({ error: 'unauthorized' }, 401);
 	try {
 		const since = params.since ? Number(params.since) : 0;
-		if (params.course) return respond(courseContent(params.course, since));
+		if (params.ping) return respond(ping());
+		if (params.action)
+			return respond(
+				submissionAction(params.action, params.course, params.work, params.submission)
+			);
+		if (params.course && params.lookup) return respond(lookup(params.course, params.users));
+		if (params.course) return respond(courseContent(params.course, since, params.work !== '0'));
 		return respond(overview(since));
 	} catch (err) {
 		return respond({ error: String(err && err.message ? err.message : err) }, 500);
 	}
 }
 
-function overview(since) {
-	const me = cached('profile', () => {
+function profile() {
+	return cached('profile', () => {
 		const p = Classroom.UserProfiles.get('me');
-		return {
-			id: p.id,
-			name: p.name && p.name.fullName,
-			email: p.emailAddress,
-			photoUrl: absolute(p.photoUrl)
-		};
+		return slimProfile(p);
 	});
+}
+
+function slimProfile(p) {
+	return {
+		id: p.id,
+		name: p.name && p.name.fullName,
+		email: p.emailAddress,
+		photoUrl: absolute(p.photoUrl)
+	};
+}
+
+function ping() {
+	const me = profile();
+	const page = Classroom.Courses.list({ studentId: 'me', courseStates: ['ACTIVE'], pageSize: 100 });
+	return { ok: true, profile: me, courseCount: (page.courses || []).length };
+}
+
+function overview(since) {
+	const me = profile();
 	const courses = paginate(
 		(token) =>
 			Classroom.Courses.list({
@@ -34,97 +58,139 @@ function overview(since) {
 			}),
 		'courses'
 	);
+	const errors = {};
 	return {
 		profile: me,
-		courses: courses.map((c) => ({
-			id: c.id,
-			name: c.name,
-			section: c.section,
-			descriptionHeading: c.descriptionHeading,
-			description: c.description,
-			room: c.room,
-			ownerId: c.ownerId,
-			courseState: c.courseState,
-			alternateLink: c.alternateLink,
-			calendarId: c.calendarId,
-			creationTime: c.creationTime,
-			updateTime: c.updateTime,
-			teachers: since ? cached('teachers:' + c.id, () => teachers(c.id)) : teachers(c.id)
-		}))
+		courses: courses.map((c) => {
+			const course = {
+				id: c.id,
+				name: c.name,
+				section: c.section,
+				descriptionHeading: c.descriptionHeading,
+				description: c.description,
+				room: c.room,
+				ownerId: c.ownerId,
+				courseState: c.courseState,
+				alternateLink: c.alternateLink,
+				calendarId: c.calendarId,
+				creationTime: c.creationTime,
+				updateTime: c.updateTime
+			};
+			if (!since) {
+				const teachers = attempt(errors, 'teachers:' + c.id, () => listTeachers(c.id));
+				if (teachers) course.teachers = teachers;
+			}
+			return course;
+		}),
+		errors: errors
 	};
 }
 
-function teachers(courseId) {
-	try {
-		return paginate(
-			(token) => Classroom.Courses.Teachers.list(courseId, { pageSize: 100, pageToken: token }),
-			'teachers'
-		).map((t) => ({
-			userId: t.userId,
-			name: t.profile && t.profile.name && t.profile.name.fullName,
-			email: t.profile && t.profile.emailAddress,
-			photoUrl: absolute(t.profile && t.profile.photoUrl)
-		}));
-	} catch (err) {
-		return [];
-	}
+function listTeachers(courseId) {
+	return paginate(
+		(token) => Classroom.Courses.Teachers.list(courseId, { pageSize: 100, pageToken: token }),
+		'teachers'
+	).map((t) => ({
+		userId: t.userId,
+		name: t.profile && t.profile.name && t.profile.name.fullName,
+		email: t.profile && t.profile.emailAddress,
+		photoUrl: absolute(t.profile && t.profile.photoUrl)
+	}));
 }
 
-function courseContent(courseId, since) {
+function lookup(courseId, users) {
+	const errors = {};
+	const out = { errors: errors };
+	const teachers = attempt(errors, 'teachers', () => listTeachers(courseId));
+	if (teachers) out.teachers = teachers;
+	const topics = attempt(errors, 'topics', () => listTopics(courseId));
+	if (topics) out.topics = topics;
+	const known = {};
+	(teachers || []).forEach((t) => (known[t.userId] = true));
+	out.people = String(users || '')
+		.split(',')
+		.filter((id) => id && !known[id])
+		.map((id) => attempt(errors, 'user:' + id, () => slimProfile(Classroom.UserProfiles.get(id))))
+		.filter(Boolean)
+		.map((p) => ({ userId: p.id, name: p.name, email: p.email, photoUrl: p.photoUrl }));
+	return out;
+}
+
+function courseContent(courseId, since, wantSubmissions) {
 	const partial = since > 0;
-	const courseWork = paginateSince(
-		(token) =>
-			Classroom.Courses.CourseWork.list(courseId, {
-				courseWorkStates: ['PUBLISHED'],
-				orderBy: 'updateTime desc',
-				pageSize: 100,
-				pageToken: token
-			}),
-		'courseWork',
-		since
+	const errors = {};
+	const out = { partial: partial, errors: errors };
+	const courseWork = attempt(errors, 'courseWork', () =>
+		paginateSince(
+			(token) =>
+				Classroom.Courses.CourseWork.list(courseId, {
+					courseWorkStates: ['PUBLISHED'],
+					orderBy: 'updateTime desc',
+					pageSize: 100,
+					pageToken: token
+				}),
+			'courseWork',
+			since
+		)
 	);
-	const materials = paginateSince(
-		(token) =>
-			Classroom.Courses.CourseWorkMaterials.list(courseId, {
-				courseWorkMaterialStates: ['PUBLISHED'],
-				orderBy: 'updateTime desc',
-				pageSize: 100,
-				pageToken: token
-			}),
-		'courseWorkMaterial',
-		since
+	if (courseWork) out.courseWork = courseWork.map(slimCourseWork);
+	const materials = attempt(errors, 'materials', () =>
+		paginateSince(
+			(token) =>
+				Classroom.Courses.CourseWorkMaterials.list(courseId, {
+					courseWorkMaterialStates: ['PUBLISHED'],
+					orderBy: 'updateTime desc',
+					pageSize: 100,
+					pageToken: token
+				}),
+			'courseWorkMaterial',
+			since
+		)
 	);
-	const announcements = paginateSince(
-		(token) =>
-			Classroom.Courses.Announcements.list(courseId, {
-				announcementStates: ['PUBLISHED'],
-				orderBy: 'updateTime desc',
-				pageSize: 100,
-				pageToken: token
-			}),
-		'announcements',
-		since
+	if (materials) out.materials = materials.map(slimMaterial);
+	const announcements = attempt(errors, 'announcements', () =>
+		paginateSince(
+			(token) =>
+				Classroom.Courses.Announcements.list(courseId, {
+					announcementStates: ['PUBLISHED'],
+					orderBy: 'updateTime desc',
+					pageSize: 100,
+					pageToken: token
+				}),
+			'announcements',
+			since
+		)
 	);
-	const topics = partial
-		? cached('topics:' + courseId, () => listTopics(courseId))
-		: listTopics(courseId);
-	const submissions = paginate(
-		(token) =>
-			Classroom.Courses.CourseWork.StudentSubmissions.list(courseId, '-', {
-				userId: 'me',
-				pageSize: 100,
-				pageToken: token
-			}),
-		'studentSubmissions'
-	);
-	return {
-		partial: partial,
-		courseWork: courseWork.map(slimCourseWork),
-		materials: materials.map(slimMaterial),
-		announcements: announcements.map(slimAnnouncement),
-		topics: topics,
-		submissions: submissions.map(slimSubmission)
-	};
+	if (announcements) out.announcements = announcements.map(slimAnnouncement);
+	if (!partial) {
+		const topics = attempt(errors, 'topics', () => listTopics(courseId));
+		if (topics) out.topics = topics;
+	}
+	if (wantSubmissions || (courseWork && courseWork.length > 0)) {
+		const submissions = attempt(errors, 'submissions', () =>
+			paginate(
+				(token) =>
+					Classroom.Courses.CourseWork.StudentSubmissions.list(courseId, '-', {
+						userId: 'me',
+						pageSize: 100,
+						pageToken: token
+					}),
+				'studentSubmissions'
+			)
+		);
+		if (submissions) out.submissions = submissions.map(slimSubmission);
+	}
+	return out;
+}
+
+function submissionAction(action, courseId, workId, submissionId) {
+	if (!courseId || !workId || !submissionId)
+		throw new Error('course, work and submission are required');
+	const api = Classroom.Courses.CourseWork.StudentSubmissions;
+	if (action === 'turnIn') withRetry(() => api.turnIn({}, courseId, workId, submissionId));
+	else if (action === 'reclaim') withRetry(() => api.reclaim({}, courseId, workId, submissionId));
+	else throw new Error('unknown action ' + action);
+	return { submission: slimSubmission(withRetry(() => api.get(courseId, workId, submissionId))) };
 }
 
 function listTopics(courseId) {
@@ -238,11 +304,34 @@ function slimAttachment(m) {
 	return { type: 'unknown', title: '', url: '' };
 }
 
+function attempt(errors, key, compute) {
+	try {
+		return compute();
+	} catch (err) {
+		errors[key] = String(err && err.message ? err.message : err);
+		return undefined;
+	}
+}
+
+function withRetry(fn) {
+	let delay = 1000;
+	for (let i = 0; ; i++) {
+		try {
+			return fn();
+		} catch (err) {
+			const message = String(err && err.message ? err.message : err);
+			if (i >= RETRIES - 1 || !TRANSIENT.test(message)) throw err;
+			Utilities.sleep(delay);
+			delay *= 2;
+		}
+	}
+}
+
 function paginate(fetchPage, key) {
 	const out = [];
 	let token;
 	do {
-		const page = fetchPage(token) || {};
+		const page = withRetry(() => fetchPage(token)) || {};
 		if (page[key]) Array.prototype.push.apply(out, page[key]);
 		token = page.nextPageToken;
 	} while (token);
@@ -254,7 +343,7 @@ function paginateSince(fetchPage, key, since) {
 	const out = [];
 	let token;
 	do {
-		const page = fetchPage(token) || {};
+		const page = withRetry(() => fetchPage(token)) || {};
 		const items = page[key] || [];
 		let stop = false;
 		for (let i = 0; i < items.length; i++) {
@@ -272,10 +361,17 @@ function paginateSince(fetchPage, key, since) {
 
 function cached(key, compute) {
 	const cache = CacheService.getScriptCache();
-	const hit = cache.get(key);
-	if (hit) return JSON.parse(hit);
+	try {
+		const hit = cache.get(key);
+		if (hit) return JSON.parse(hit);
+	} catch (err) {}
 	const value = compute();
-	cache.put(key, JSON.stringify(value), CACHE_TTL);
+	const empty = value == null || (Array.isArray(value) && value.length === 0);
+	if (!empty) {
+		try {
+			cache.put(key, JSON.stringify(value), CACHE_TTL);
+		} catch (err) {}
+	}
 	return value;
 }
 

@@ -12,7 +12,6 @@
 
 	let { data } = $props();
 	const now = Date.now();
-	const DAY = 86_400_000;
 
 	const rows = useLiveQuery({ query: workWithContext });
 	const stream = useLiveQuery({
@@ -30,16 +29,6 @@
 	);
 	const open = $derived(work.filter((w) => w.status === 'assigned' || w.status === 'missing'));
 	const missing = $derived(open.filter((w) => w.status === 'missing'));
-	const graded = $derived(
-		work.filter((w) => w.status === 'graded' && w.assignedGrade !== undefined && w.maxPoints)
-	);
-	const average = $derived(
-		graded.length
-			? Math.round(
-					(graded.reduce((s, w) => s + w.assignedGrade! / w.maxPoints!, 0) / graded.length) * 100
-				)
-			: null
-	);
 
 	type Group = { key: string; label: string; items: WorkSummary[] };
 	const groups = $derived.by(() => {
@@ -56,16 +45,6 @@
 		return out;
 	});
 
-	const stats = $derived([
-		{
-			label: 'Due this week',
-			value: open.filter((w) => w.dueAt !== undefined && w.dueAt >= now && w.dueAt < now + 7 * DAY)
-				.length
-		},
-		{ label: 'Missing', value: missing.length },
-		{ label: 'Awaiting grade', value: work.filter((w) => w.status === 'turnedIn').length },
-		{ label: 'Average grade', value: average === null ? '–' : `${average}%` }
-	]);
 	const courseCount = $derived(new Set(work.map((w) => w.courseId)).size);
 	const firstName = $derived(data.snapshot.profile?.name?.split(' ')[0]);
 </script>
@@ -79,17 +58,6 @@
 			'course'
 		)}.{:else}Nothing outstanding right now.{/if}
 </p>
-
-<dl class="mt-6 grid grid-cols-2 gap-y-6 lg:grid-cols-4">
-	{#each stats as stat, i (stat.label)}
-		<div
-			class={`flex flex-col gap-1 border-border/60 ${i % 2 === 1 ? 'border-l pl-6' : 'pr-6'} ${i >= 2 ? 'lg:border-l lg:pl-6' : ''} ${i === 2 ? 'max-lg:pr-6 max-lg:pl-0 lg:pr-6' : ''} ${i === 3 ? 'lg:pr-0' : ''}`}
-		>
-			<dt class="truncate text-sm text-muted-foreground">{stat.label}</dt>
-			<dd class="text-3xl font-semibold tracking-tight tabular-nums">{stat.value}</dd>
-		</div>
-	{/each}
-</dl>
 
 <div class="mt-10 grid gap-12 *:min-w-0 lg:grid-cols-[3fr_2fr]">
 	<section>

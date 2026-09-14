@@ -22,9 +22,11 @@ export type Course = {
 	createdAt: number;
 	updatedAt: number;
 	teachers: Teacher[];
+	people?: Teacher[];
 	archived: boolean;
 	lastSyncedAt?: number;
 	nickname?: string;
+	color?: string;
 	hidden: boolean;
 };
 

@@ -80,7 +80,6 @@
 					dueAt={w.dueAt}
 					assignedGrade={w.assignedGrade}
 					maxPoints={w.maxPoints}
-					showAssigned
 				/>
 			</div>
 		</div>

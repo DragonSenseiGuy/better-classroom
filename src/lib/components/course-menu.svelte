@@ -9,7 +9,13 @@
 	import ExternalLinkIcon from '@lucide/svelte/icons/external-link';
 	import RotateCcwIcon from '@lucide/svelte/icons/rotate-ccw';
 
-	type Course = { id: string; name: string; nickname?: string; alternateLink?: string };
+	type Course = {
+		id: string;
+		name: string;
+		nickname?: string;
+		color?: string;
+		alternateLink?: string;
+	};
 	let {
 		course,
 		onRename,
@@ -38,7 +44,9 @@
 		{@render children()}
 	</ContextMenu.Trigger>
 	<ContextMenu.Content class="w-52">
-		<ContextMenu.Item onSelect={() => onRename(course)}><PencilIcon />Rename…</ContextMenu.Item>
+		<ContextMenu.Item onSelect={() => onRename(course)}
+			><PencilIcon />Rename or recolor…</ContextMenu.Item
+		>
 		{#if course.nickname}
 			<ContextMenu.Item onSelect={resetName}><RotateCcwIcon />Use original name</ContextMenu.Item>
 		{/if}

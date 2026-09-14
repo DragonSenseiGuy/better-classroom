@@ -104,24 +104,7 @@ export function statusRank(status: WorkStatus) {
 	return { missing: 0, assigned: 1, returned: 2, turnedIn: 3, graded: 4 }[status];
 }
 
-const PALETTE = [
-	'bg-emerald-500',
-	'bg-amber-500',
-	'bg-sky-500',
-	'bg-rose-500',
-	'bg-violet-500',
-	'bg-teal-500',
-	'bg-orange-500',
-	'bg-fuchsia-500',
-	'bg-lime-500',
-	'bg-cyan-500'
-];
-
-export function courseColor(id: string) {
-	let h = 0;
-	for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
-	return PALETTE[h % PALETTE.length];
-}
+export { courseColor } from '#lib/course-colors.svelte.ts';
 
 export function initials(name: string | undefined) {
 	if (!name) return '?';

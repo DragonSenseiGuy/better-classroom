@@ -1,6 +1,6 @@
 export async function setCoursePrefs(
 	id: string,
-	patch: { nickname?: string | null; hidden?: boolean }
+	patch: { nickname?: string | null; color?: string | null; hidden?: boolean }
 ) {
 	const res = await fetch(`/api/courses/${id}/prefs`, {
 		method: 'POST',

@@ -65,12 +65,23 @@ function handle(event: ServerEvent) {
 	}
 }
 
+type ChangeListener = (name: CollectionName, changes: Change[]) => void;
+const listeners = new Set<ChangeListener>();
+
+export function onChanges(listener: ChangeListener) {
+	listeners.add(listener);
+	return () => {
+		listeners.delete(listener);
+	};
+}
+
 function apply(name: CollectionName, changes: Change[]) {
 	const w = writers.get(name);
 	if (!w) return;
 	w.begin();
 	for (const c of changes) w.write({ type: c.type, key: c.key, value: c.value as object });
 	w.commit();
+	for (const l of listeners) l(name, changes);
 }
 
 async function resync() {

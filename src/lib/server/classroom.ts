@@ -23,12 +23,20 @@ export type RawCourse = {
 	calendarId?: string;
 	creationTime?: string;
 	updateTime?: string;
-	teachers: RawTeacher[];
+	teachers?: RawTeacher[];
 };
 
 export type RawOverview = {
 	profile: { id: string; name?: string; email?: string; photoUrl?: string };
 	courses: RawCourse[];
+	errors?: Record<string, string>;
+};
+
+export type RawLookup = {
+	teachers?: RawTeacher[];
+	topics?: { id: string; name: string; updateTime?: string }[];
+	people?: RawTeacher[];
+	errors?: Record<string, string>;
 };
 
 export type RawCourseWork = {
@@ -84,21 +92,127 @@ export type RawSubmission = {
 	attachments: RawAttachment[];
 };
 
+export type RawSubmissionAction = { submission: RawSubmission };
+
 export type RawCourseContent = {
 	partial?: boolean;
-	courseWork: RawCourseWork[];
-	materials: RawMaterial[];
-	announcements: RawAnnouncement[];
-	topics: { id: string; name: string; updateTime?: string }[];
-	submissions: RawSubmission[];
+	courseWork?: RawCourseWork[];
+	materials?: RawMaterial[];
+	announcements?: RawAnnouncement[];
+	topics?: { id: string; name: string; updateTime?: string }[];
+	submissions?: RawSubmission[];
+	errors?: Record<string, string>;
 };
 
 const ATTEMPTS = 3;
 
+export type Ping = {
+	ok: true;
+	profile: { id: string; name?: string; email?: string; photoUrl?: string };
+	courseCount: number;
+};
+
+export type ConnectionTest =
+	| { ok: true; name?: string; email?: string; courseCount: number }
+	| {
+			ok: false;
+			code: 'url' | 'access' | 'key' | 'manifest' | 'script' | 'network';
+			message: string;
+	  };
+
+const WEB_APP_URL = /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/;
+
+export async function testConnection(url: string, key: string): Promise<ConnectionTest> {
+	if (!WEB_APP_URL.test(url.trim()))
+		return {
+			ok: false,
+			code: 'url',
+			message:
+				'That is not a web app URL. It starts with https://script.google.com/macros/s/ and ends with /exec.'
+		};
+	const target = new URL(url.trim());
+	target.searchParams.set('key', key);
+	target.searchParams.set('ping', '1');
+	let res: Response;
+	let text: string;
+	try {
+		res = await fetch(target, { redirect: 'follow', signal: AbortSignal.timeout(60_000) });
+		text = await res.text();
+	} catch (err) {
+		return {
+			ok: false,
+			code: 'network',
+			message: `Could not reach Google: ${err instanceof Error ? err.message : String(err)}`
+		};
+	}
+	let body: unknown;
+	try {
+		body = JSON.parse(text);
+	} catch {
+		if (/accounts\.google\.com|ServiceLogin|sign in/i.test(text))
+			return {
+				ok: false,
+				code: 'access',
+				message:
+					'Google asked for a sign-in. In the deployment, set “Who has access” to Anyone, not “Anyone with Google account”.'
+			};
+		if (res.status === 404 || /unable to open|not found/i.test(text))
+			return {
+				ok: false,
+				code: 'url',
+				message:
+					'Google could not find that deployment. Copy the URL from Deploy → Manage deployments.'
+			};
+		return {
+			ok: false,
+			code: 'script',
+			message: `Unexpected response (${res.status}): ${text
+				.replace(/<[^>]+>/g, ' ')
+				.trim()
+				.slice(0, 160)}`
+		};
+	}
+	if (body && typeof body === 'object' && 'error' in body) {
+		const error = String((body as { error: unknown }).error);
+		if (/unauthorized/i.test(error))
+			return {
+				ok: false,
+				code: 'key',
+				message:
+					'The key in the script does not match. Paste Code.gs again from step 1, then deploy a new version.'
+			};
+		if (/Classroom is not defined|not enabled|advanced service/i.test(error))
+			return {
+				ok: false,
+				code: 'manifest',
+				message:
+					'The Classroom service is not enabled. Paste appsscript.json from step 1, then deploy a new version.'
+			};
+		return { ok: false, code: 'script', message: error };
+	}
+	const ping = body as Partial<Ping>;
+	if (!ping.ok || !ping.profile)
+		return {
+			ok: false,
+			code: 'script',
+			message:
+				'The script replied, but not with the expected ping. Paste the latest Code.gs and redeploy.'
+		};
+	return {
+		ok: true,
+		name: ping.profile.name,
+		email: ping.profile.email,
+		courseCount: ping.courseCount ?? 0
+	};
+}
+
 export async function fetchAppsScript<T>(params: Record<string, string>): Promise<T> {
 	const base = config.appsScriptUrl;
 	const key = config.appsScriptKey;
-	if (!base || !key) throw new Error('APPS_SCRIPT_URL and APPS_SCRIPT_KEY must be set in .env');
+	if (!base || !key)
+		throw new Error(
+			'APPS_SCRIPT_URL and APPS_SCRIPT_KEY are not configured. Finish setup at /setup.'
+		);
 	const url = new URL(base);
 	url.searchParams.set('key', key);
 	for (const [k, val] of Object.entries(params)) url.searchParams.set(k, val);

@@ -10,7 +10,7 @@
 		submissions,
 		topics
 	} from '#lib/db/collections.ts';
-	import { summarize } from '#lib/work.ts';
+	import { isOpen, summarize } from '#lib/work.ts';
 	import * as Tabs from '#lib/components/ui/tabs/index.js';
 	import UserAvatar from '#lib/components/user-avatar.svelte';
 	import * as Item from '#lib/components/ui/item/index.js';
@@ -71,12 +71,23 @@
 	}
 
 	type Entry =
-		| { kind: 'work'; at: number; item: (typeof work)[number] }
-		| { kind: 'material'; at: number; item: (typeof materialQuery.data)[number] };
+		| { kind: 'work'; rank: number; at: number; item: (typeof work)[number] }
+		| { kind: 'material'; rank: number; at: number; item: (typeof materialQuery.data)[number] };
+	const byRank = (a: Entry, b: Entry) =>
+		a.rank - b.rank || (a.rank === 0 ? a.at - b.at : b.at - a.at);
 	const sections = $derived.by(() => {
 		const entries: Entry[] = [
-			...work.map((w) => ({ kind: 'work' as const, at: w.dueAt ?? w.updatedAt, item: w })),
-			...materialQuery.data.map((m) => ({ kind: 'material' as const, at: m.updatedAt, item: m }))
+			...work.map((w) =>
+				isOpen(w)
+					? { kind: 'work' as const, rank: 0, at: w.dueAt ?? Infinity, item: w }
+					: { kind: 'work' as const, rank: 1, at: w.dueAt ?? w.updatedAt, item: w }
+			),
+			...materialQuery.data.map((m) => ({
+				kind: 'material' as const,
+				rank: 1,
+				at: m.updatedAt,
+				item: m
+			}))
 		];
 		const byTopic = new Map<string | undefined, Entry[]>();
 		for (const e of entries)
@@ -86,12 +97,17 @@
 			{ id: undefined, name: 'No topic' }
 		];
 		return list
-			.map((t) => ({ ...t, entries: (byTopic.get(t.id) ?? []).sort((a, b) => b.at - a.at) }))
+			.map((t) => ({ ...t, entries: (byTopic.get(t.id) ?? []).sort(byRank) }))
 			.filter((t) => t.entries.length);
 	});
-	const openCount = $derived(
-		work.filter((w) => w.status === 'assigned' || w.status === 'missing').length
-	);
+	const openCount = $derived(work.filter(isOpen).length);
+
+	$effect(() => {
+		const hash = page.url.hash;
+		if (!hash || streamQuery.data.length === 0) return;
+		const el = document.getElementById(hash.slice(1));
+		el?.scrollIntoView({ block: 'center' });
+	});
 </script>
 
 {#if course}

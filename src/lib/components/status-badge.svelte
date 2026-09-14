@@ -8,15 +8,13 @@
 		late = false,
 		dueAt,
 		assignedGrade,
-		maxPoints,
-		showAssigned = false
+		maxPoints
 	}: {
 		status: WorkStatus;
 		late?: boolean;
 		dueAt?: number;
 		assignedGrade?: number;
 		maxPoints?: number;
-		showAssigned?: boolean;
 	} = $props();
 	const effective = $derived(
 		status === 'assigned' && dueAt !== undefined && dueAt < Date.now() ? 'missing' : status
@@ -35,6 +33,4 @@
 	</Badge>
 {:else if isDueSoon(dueAt)}
 	<Badge variant="outline" class="text-amber-700 dark:text-amber-400">Due soon</Badge>
-{:else if showAssigned}
-	<Badge variant="secondary">Assigned</Badge>
 {/if}

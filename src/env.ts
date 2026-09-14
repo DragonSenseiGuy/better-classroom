@@ -11,6 +11,14 @@ export const variables = defineEnvVars({
 		schema: optional,
 		description: 'Value of the CLASSROOM_SYNC_KEY script property'
 	},
+	GOOGLE_CLIENT_ID: {
+		schema: optional,
+		description: 'OAuth client ID for direct Google sign-in'
+	},
+	GOOGLE_CLIENT_SECRET: {
+		schema: optional,
+		description: 'OAuth client secret for direct Google sign-in'
+	},
 	SYNC_INTERVAL_MINUTES: {
 		schema: (value) => {
 			if (!value) return 5;

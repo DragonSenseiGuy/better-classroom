@@ -7,7 +7,8 @@ import type {
 	Profile,
 	RowOf,
 	Snapshot,
-	SyncStatus
+	SyncStatus,
+	Teacher
 } from '#lib/shared/types.ts';
 import { config, isConfigured } from './config';
 
@@ -47,6 +48,14 @@ export function setMeta(key: string, value: unknown) {
 			'INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value'
 		)
 		.run(key, JSON.stringify(value));
+}
+
+export type Connection = { url: string; key: string };
+
+export const getConnection = () => getMeta<Connection>('connection') ?? null;
+
+export function saveConnection(connection: Connection) {
+	setMeta('connection', connection);
 }
 
 export function getProfile() {
@@ -111,8 +120,18 @@ function sortKeys(value: unknown): unknown {
 	return value;
 }
 
+export function getCourse(courseId: string): Course | null {
+	const row = db().query('SELECT id, data FROM courses WHERE id = ?').get(courseId) as Row | null;
+	return row ? (JSON.parse(row.data) as Course) : null;
+}
+
 export function applyCourses(
-	courses: Omit<Course, 'archived' | 'lastSyncedAt' | 'nickname' | 'hidden'>[]
+	courses: (Omit<
+		Course,
+		'archived' | 'lastSyncedAt' | 'nickname' | 'color' | 'hidden' | 'teachers'
+	> & {
+		teachers?: Teacher[];
+	})[]
 ): Change<Course>[] {
 	const d = db();
 	const existing = new Map(listAll('courses').map((c) => [c.id, c]));
@@ -127,9 +146,12 @@ export function applyCourses(
 			const prev = existing.get(c.id);
 			const next: Course = {
 				...c,
+				teachers: c.teachers?.length ? c.teachers : (prev?.teachers ?? []),
+				people: prev?.people ?? [],
 				archived: false,
 				lastSyncedAt: prev?.lastSyncedAt,
 				nickname: prev?.nickname,
+				color: prev?.color,
 				hidden: prev?.hidden ?? false
 			};
 			if (!prev) changes.push({ type: 'insert', key: c.id, value: next });
@@ -150,18 +172,34 @@ export function applyCourses(
 	return changes;
 }
 
-export function setCoursePrefs(
-	courseId: string,
-	patch: { nickname?: string | null; hidden?: boolean }
-): Change<Course> | null {
+export type CoursePrefs = { nickname?: string | null; color?: string | null; hidden?: boolean };
+
+export function setCoursePrefs(courseId: string, patch: CoursePrefs): Change<Course> | null {
 	const row = db().query('SELECT id, data FROM courses WHERE id = ?').get(courseId) as Row | null;
 	if (!row) return null;
 	const prev = JSON.parse(row.data) as Course;
 	const next: Course = {
 		...prev,
 		nickname: patch.nickname === undefined ? prev.nickname : patch.nickname?.trim() || undefined,
+		color: patch.color === undefined ? prev.color : (patch.color ?? undefined),
 		hidden: patch.hidden ?? prev.hidden ?? false
 	};
+	db().query('UPDATE courses SET data = ? WHERE id = ?').run(JSON.stringify(next), courseId);
+	return { type: 'update', key: courseId, value: next };
+}
+
+export function mergeCoursePeople(
+	courseId: string,
+	patch: { teachers?: Teacher[]; people?: Teacher[] }
+): Change<Course> | null {
+	const prev = getCourse(courseId);
+	if (!prev) return null;
+	const people = new Map((prev.people ?? []).map((p) => [p.userId, p]));
+	for (const p of patch.people ?? []) people.set(p.userId, p);
+	const teachers = patch.teachers?.length ? patch.teachers : prev.teachers;
+	for (const t of teachers) people.delete(t.userId);
+	const next: Course = { ...prev, teachers, people: [...people.values()] };
+	if (stable(prev) === stable(next)) return null;
 	db().query('UPDATE courses SET data = ? WHERE id = ?').run(JSON.stringify(next), courseId);
 	return { type: 'update', key: courseId, value: next };
 }

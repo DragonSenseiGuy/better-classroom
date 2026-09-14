@@ -6,6 +6,19 @@
 		<meta name="color-scheme" content="light dark" />
 		<meta name="referrer" content="no-referrer" />
 		<meta name="text-scale" content="scale" />
+		<script>
+			try {
+				var d = document.documentElement;
+				var t = localStorage.getItem('theme');
+				var m = localStorage.getItem('theme-mode');
+				if (t && m) {
+					d.dataset.theme = t;
+					d.dataset.mode = m;
+				} else {
+					d.dataset.mode = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+				}
+			} catch (e) {}
+		</script>
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover" data-sveltekit-preload-code="viewport">

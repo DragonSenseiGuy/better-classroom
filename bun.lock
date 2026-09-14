@@ -7,7 +7,7 @@
       "dependencies": {
         "@fontsource-variable/valley-sans": "^5.3.1",
         "@leeoniya/ufuzzy": "^1.0.19",
-        "@lucide/svelte": "^1.43.0",
+        "@lucide/svelte": "^1.46.0",
         "@tanstack/db": "^0.8.7",
         "@tanstack/svelte-db": "^0.3.7",
         "@tanstack/svelte-hotkeys": "^0.10.0",
@@ -25,7 +25,7 @@
         "@types/bun": "^1.4.2",
         "@types/canvas-confetti": "^1.9.0",
         "@types/node": "^26.5.0",
-        "bits-ui": "^2.16.3",
+        "bits-ui": "^2.18.0",
         "clsx": "^2.1.1",
         "prettier": "^3.8.3",
         "prettier-plugin-svelte": "^4.1.0",
@@ -66,7 +66,7 @@
 
     "@leeoniya/ufuzzy": ["@leeoniya/ufuzzy@1.0.19", "", {}, "sha512-0pikDeYt0IHEUPza5RTCDXc/17S1pTrYnReEMp8Aa6k1ovzw5QdZLwicW8TjljwEZRb6oYag0xmALohrcq/yOQ=="],
 
-    "@lucide/svelte": ["@lucide/svelte@1.43.0", "", { "peerDependencies": { "svelte": "^5" } }, "sha512-IfxS4hVxojnafzFKkQGzndoM6yUODmGc07I0h6R/1SlwDoZwd/5gl90zHz+fTaBVLZo7uE5sPDySFGiK4iMQKw=="],
+    "@lucide/svelte": ["@lucide/svelte@1.46.0", "", { "peerDependencies": { "svelte": "^5" } }, "sha512-Ru8jDjoCVLJ7J7pPRUdY+odSBV2BI6rj68JTmT+ENq/ZwYOPGPAiKVvKz+XLyAoK4HAwlRTzZHpsMvrHfsetqg=="],
 
     "@oxc-project/types": ["@oxc-project/types@0.149.0", "", {}, "sha512-Efcc+iF0j3Bf67YjEqIqWXbX5XddXoK/Mw4K1/JuXwRCZ8N16VR7iT23nlCc9XrveFVh/E5Rqs2StT0V8v9LdA=="],
 

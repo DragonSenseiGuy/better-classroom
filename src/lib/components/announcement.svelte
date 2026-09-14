@@ -12,10 +12,15 @@
 	}: { item: Announcement; course: Course; showCourse?: boolean; clamp?: boolean } = $props();
 	let expanded = $state(false);
 	const long = $derived(clamp && (item.text.length > 400 || item.text.split('\n').length > 6));
-	const author = $derived(course.teachers.find((t) => t.userId === item.creatorUserId));
+	const author = $derived(
+		[...course.teachers, ...(course.people ?? [])].find((t) => t.userId === item.creatorUserId)
+	);
 </script>
 
-<article id={`a-${item.id}`} class="flex scroll-mt-20 gap-3 py-4">
+<article
+	id={`a-${item.id}`}
+	class="-mx-3 flex scroll-mt-20 gap-3 rounded-lg px-3 py-4 transition-colors target:bg-accent/60"
+>
 	<UserAvatar src={author?.photoUrl} name={author?.name} class="size-8" fallbackClass="text-xs" />
 	<div class="min-w-0 flex-1">
 		<div class="flex flex-wrap items-baseline gap-x-2 text-sm">
@@ -30,10 +35,22 @@
 					)}
 				</a>
 			{/if}
-			<time
-				datetime={new Date(item.createdAt).toISOString()}
-				class="text-muted-foreground tabular-nums">{formatRelative(item.createdAt)}</time
-			>
+			{#if showCourse}
+				<a
+					href={`/courses/${item.courseId}?tab=stream#a-${item.id}`}
+					class="text-muted-foreground tabular-nums hover:text-foreground hover:underline"
+					title="View in course stream"
+				>
+					<time datetime={new Date(item.createdAt).toISOString()}
+						>{formatRelative(item.createdAt)}</time
+					>
+				</a>
+			{:else}
+				<time
+					datetime={new Date(item.createdAt).toISOString()}
+					class="text-muted-foreground tabular-nums">{formatRelative(item.createdAt)}</time
+				>
+			{/if}
 		</div>
 		<p
 			class={`mt-1 text-sm text-pretty break-words whitespace-pre-wrap ${long && !expanded ? 'line-clamp-6' : ''}`}

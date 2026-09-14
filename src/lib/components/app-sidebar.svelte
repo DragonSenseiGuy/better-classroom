@@ -3,6 +3,7 @@
 	import UserAvatar from '#lib/components/user-avatar.svelte';
 	import { Kbd, KbdGroup } from '#lib/components/ui/kbd/index.js';
 	import { page } from '$app/state';
+	import { afterNavigate } from '$app/navigation';
 	import { courseColor, displayName } from '#lib/format.ts';
 	import CourseMenu from '#lib/components/course-menu.svelte';
 	import RenameCourseDialog from '#lib/components/rename-course-dialog.svelte';
@@ -17,6 +18,7 @@
 		id: string;
 		name: string;
 		nickname?: string;
+		color?: string;
 		section?: string;
 		alternateLink?: string;
 	};
@@ -26,16 +28,27 @@
 		courses,
 		profile,
 		onSearch,
-		inboxCount = 0
-	}: { courses: Course[]; profile: Profile; onSearch: () => void; inboxCount?: number } = $props();
+		inboxCount = 0,
+		todoCount = 0
+	}: {
+		courses: Course[];
+		profile: Profile;
+		onSearch: () => void;
+		inboxCount?: number;
+		todoCount?: number;
+	} = $props();
 
 	let renaming = $state<Course | null>(null);
 
-	const nav = [
-		{ href: '/', label: 'Home', icon: HouseIcon },
-		{ href: '/inbox', label: 'Inbox', icon: InboxIcon },
-		{ href: '/todo', label: 'To-do', icon: ListChecksIcon }
-	];
+	const sidebar = Sidebar.useSidebar();
+	afterNavigate(() => sidebar.setOpenMobile(false));
+	const closeOnMobile = () => sidebar.isMobile && sidebar.setOpenMobile(false);
+
+	const nav = $derived([
+		{ href: '/', label: 'Home', icon: HouseIcon, count: 0 },
+		{ href: '/inbox', label: 'Inbox', icon: InboxIcon, count: inboxCount },
+		{ href: '/todo', label: 'To-do', icon: ListChecksIcon, count: todoCount }
+	]);
 	const isActive = (href: string) =>
 		href === '/' ? page.url.pathname === '/' : page.url.pathname.startsWith(href);
 </script>
@@ -46,7 +59,12 @@
 			<Sidebar.GroupContent>
 				<Sidebar.Menu>
 					<Sidebar.MenuItem>
-						<Sidebar.MenuButton onclick={onSearch}>
+						<Sidebar.MenuButton
+							onclick={() => {
+								closeOnMobile();
+								onSearch();
+							}}
+						>
 							<SearchIcon />
 							<span>Search</span>
 							<KbdGroup class="ml-auto"><Kbd>⌘</Kbd><Kbd>K</Kbd></KbdGroup>
@@ -59,9 +77,9 @@
 									<a href={item.href} {...props}><item.icon /><span>{item.label}</span></a>
 								{/snippet}
 							</Sidebar.MenuButton>
-							{#if item.href === '/inbox' && inboxCount > 0}
+							{#if item.count > 0}
 								<Sidebar.MenuBadge class="tabular-nums"
-									>{inboxCount > 99 ? '99+' : inboxCount}</Sidebar.MenuBadge
+									>{item.count > 99 ? '99+' : item.count}</Sidebar.MenuBadge
 								>
 							{/if}
 						</Sidebar.MenuItem>

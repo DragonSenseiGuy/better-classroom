@@ -16,5 +16,5 @@
 			</p>{/if}
 		{#if children}<div class="mt-2">{@render children()}</div>{/if}
 	</div>
-	{#if actions}<div class="flex shrink-0 items-center gap-2">{@render actions()}</div>{/if}
+	{#if actions}<div class="flex min-w-0 flex-wrap items-center gap-2">{@render actions()}</div>{/if}
 </div>

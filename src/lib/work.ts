@@ -7,6 +7,7 @@ export type WorkSummary = CourseWork & {
 	late: boolean;
 	assignedGrade?: number;
 	draftGrade?: number;
+	submissionId?: string;
 };
 
 export function summarize(
@@ -21,9 +22,22 @@ export function summarize(
 		status: workStatus(sub, w.dueAt, now),
 		late: sub?.late ?? false,
 		assignedGrade: sub?.assignedGrade,
-		draftGrade: sub?.draftGrade
+		draftGrade: sub?.draftGrade,
+		submissionId: sub?.id
 	};
 }
+
+export const canTurnIn = (w: WorkSummary) => isOpen(w) && w.submissionId !== undefined;
+export const canReclaim = (w: WorkSummary) =>
+	w.status === 'turnedIn' && w.submissionId !== undefined;
+
+const NEW_WINDOW = 3 * 86_400_000;
+
+export const isOpen = (w: { status: WorkStatus }) =>
+	w.status === 'assigned' || w.status === 'missing';
+
+export const isNew = (w: { createdAt: number; status: WorkStatus }, now = Date.now()) =>
+	isOpen(w) && now - w.createdAt < NEW_WINDOW;
 
 export const byDue = (
 	a: { dueAt?: number; updatedAt: number },

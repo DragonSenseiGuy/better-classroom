@@ -1,28 +1,43 @@
-import { fetchAppsScript, type RawCourseContent, type RawOverview } from './classroom';
+import {
+	fetchAppsScript,
+	type RawCourseContent,
+	type RawLookup,
+	type RawOverview,
+	type RawSubmissionAction,
+	type RawTeacher
+} from './classroom';
 import { warmAvatars } from './avatars';
+import { fetchGoogle, isGoogleConnected } from './google';
 import { config, isConfigured } from './config';
 import { broadcast } from './events';
 import { rebuildSearchIndex } from './search';
 import {
 	applyContent,
 	applyCourses,
+	getCourse,
 	getMeta,
 	getSyncStatus,
+	listByCourse,
+	mergeCoursePeople,
 	saveSyncStatus,
 	setMeta,
 	setProfile,
 	setCoursePrefs,
 	setDismissed,
 	touchCourseSynced,
-	type ContentTable
+	type ContentTable,
+	type CoursePrefs
 } from './store';
 import { dueAt, ms } from '#lib/shared/time.ts';
-import type { Attachment, Change, CollectionName, SyncStatus } from '#lib/shared/types.ts';
+import type { Attachment, Change, CollectionName, SyncStatus, Teacher } from '#lib/shared/types.ts';
 
 let state: SyncStatus = getSyncStatus();
 let running: Promise<void> | null = null;
 
 export const syncStatus = () => state;
+
+const fetchSource = <T>(params: Record<string, string>): Promise<T> =>
+	isGoogleConnected() ? fetchGoogle<T>(params) : fetchAppsScript<T>(params);
 
 function setState(patch: Partial<SyncStatus>) {
 	state = {
@@ -41,9 +56,20 @@ function publish(collection: CollectionName, changes: Change[]) {
 	broadcast({ type: 'changes', version: state.version, collection, changes });
 }
 
+let queuedFull = false;
+
 export function runSync(options: { full?: boolean } = {}): Promise<void> {
-	if (running) return running;
-	running = doSync(options).finally(() => (running = null));
+	if (running) {
+		if (options.full) queuedFull = true;
+		return running;
+	}
+	running = doSync(options).finally(() => {
+		running = null;
+		if (queuedFull) {
+			queuedFull = false;
+			void runSync({ full: true });
+		}
+	});
 	return running;
 }
 
@@ -61,7 +87,7 @@ async function doSync(options: { full?: boolean }) {
 	const startedAt = Date.now();
 	setState({ status: 'running', startedAt, error: undefined, pending: 0 });
 	try {
-		const overview = await fetchAppsScript<RawOverview>(since ? { since: String(since) } : {});
+		const overview = await fetchSource<RawOverview>(since ? { since: String(since) } : {});
 		setProfile({
 			id: overview.profile.id,
 			name: overview.profile.name ?? undefined,
@@ -81,29 +107,30 @@ async function doSync(options: { full?: boolean }) {
 			calendarId: c.calendarId ?? undefined,
 			createdAt: ms(c.creationTime),
 			updatedAt: ms(c.updateTime),
-			teachers: (c.teachers ?? []).map((t) => ({
-				userId: t.userId,
-				name: t.name ?? undefined,
-				email: t.email ?? undefined,
-				photoUrl: t.photoUrl ?? undefined
-			}))
+			teachers: c.teachers?.map(person)
 		}));
 		publish('courses', applyCourses(courses));
 		setState({ pending: courses.length, courseCount: courses.length });
 		void warmAvatars([
 			overview.profile.photoUrl ?? undefined,
-			...courses.flatMap((c) => c.teachers.map((t) => t.photoUrl))
+			...courses.flatMap((c) => (c.teachers ?? []).map((t) => t.photoUrl))
 		]);
 
-		const errors: string[] = [];
+		const errors: string[] = scriptErrors('Courses', overview.errors);
 		const queue = [...courses];
 		const worker = async () => {
 			for (let c = queue.shift(); c; c = queue.shift()) {
 				try {
-					const content = await fetchAppsScript<RawCourseContent>(
-						since ? { course: c.id, since: String(since) } : { course: c.id }
-					);
-					applyCourseContent(c.id, content);
+					const params: Record<string, string> = { course: c.id };
+					if (since) {
+						params.since = String(since);
+						if (listByCourse('courseWork', c.id).length === 0) params.work = '0';
+					}
+					const content = await fetchSource<RawCourseContent>(params);
+					errors.push(...scriptErrors(c.name, content.errors));
+					const unknown = applyCourseContent(c.id, content);
+					if (unknown.users.length || unknown.topics)
+						errors.push(...(await resolveUnknown(c.id, c.name, unknown.users)));
 				} catch (err) {
 					errors.push(`${c.name}: ${err instanceof Error ? err.message : String(err)}`);
 				}
@@ -214,22 +241,101 @@ export function applyCourseContent(courseId: string, raw: RawCourseContent) {
 	const content = shapeContent(courseId, raw);
 	const partial = raw.partial === true;
 	for (const table of Object.keys(content) as ContentTable[]) {
+		if (raw[table] === undefined) continue;
 		const keepMissing = partial && table !== 'submissions';
 		publish(table, applyContent(table, courseId, content[table], keepMissing));
 	}
 	const touched = touchCourseSynced(courseId);
 	if (touched) publish('courses', [touched]);
+	return unknownReferences(courseId, content);
 }
 
-export function updateCoursePrefs(
-	courseId: string,
-	patch: { nickname?: string | null; hidden?: boolean }
-) {
+const person = (t: RawTeacher): Teacher => ({
+	userId: t.userId,
+	name: t.name ?? undefined,
+	email: t.email ?? undefined,
+	photoUrl: t.photoUrl ?? undefined
+});
+
+const scriptErrors = (label: string, errors?: Record<string, string>) =>
+	Object.entries(errors ?? {}).map(([part, message]) => `${label} (${part}): ${message}`);
+
+const LOOKUP_RETRY_MS = 24 * 3_600_000;
+
+function unknownReferences(courseId: string, content: ReturnType<typeof shapeContent>) {
+	const course = getCourse(courseId);
+	const known = new Set(
+		[...(course?.teachers ?? []), ...(course?.people ?? [])].map((p) => p.userId)
+	);
+	const tried = getMeta<Record<string, number>>(`lookupTried:${courseId}`) ?? {};
+	const cutoff = Date.now() - LOOKUP_RETRY_MS;
+	const users = new Set<string>();
+	for (const item of [...content.courseWork, ...content.materials, ...content.announcements]) {
+		const id = item.creatorUserId;
+		if (id && !known.has(id) && (tried[id] ?? 0) < cutoff) users.add(id);
+	}
+	const topicIds = new Set(listByCourse('topics', courseId).map((t) => t.id));
+	const topics = [...content.courseWork, ...content.materials].some(
+		(item) => item.topicId && !topicIds.has(item.topicId)
+	);
+	return { users: [...users], topics };
+}
+
+async function resolveUnknown(courseId: string, name: string, users: string[]) {
+	const params: Record<string, string> = { course: courseId, lookup: '1' };
+	if (users.length) params.users = users.join(',');
+	const found = await fetchSource<RawLookup>(params);
+	const change = mergeCoursePeople(courseId, {
+		teachers: found.teachers?.map(person),
+		people: found.people?.map(person)
+	});
+	if (change) {
+		publish('courses', [change]);
+		void warmAvatars(
+			[...change.value.teachers, ...(change.value.people ?? [])].map((p) => p.photoUrl)
+		);
+	}
+	if (found.topics) {
+		const topics = shapeContent(courseId, { topics: found.topics }).topics;
+		publish('topics', applyContent('topics', courseId, topics, false));
+	}
+	if (users.length) {
+		const tried = getMeta<Record<string, number>>(`lookupTried:${courseId}`) ?? {};
+		const now = Date.now();
+		for (const id of users) tried[id] = now;
+		setMeta(`lookupTried:${courseId}`, tried);
+	}
+	const errors = Object.fromEntries(
+		Object.entries(found.errors ?? {}).filter(([part]) => !part.startsWith('user:'))
+	);
+	return scriptErrors(`${name} lookup`, errors);
+}
+
+export function updateCoursePrefs(courseId: string, patch: CoursePrefs) {
 	const change = setCoursePrefs(courseId, patch);
 	if (!change) return null;
 	publish('courses', [change]);
 	rebuildSearchIndex();
 	return change.value;
+}
+
+export type SubmissionAction = 'turnIn' | 'reclaim';
+
+export async function submissionAction(
+	action: SubmissionAction,
+	courseId: string,
+	workId: string,
+	submissionId: string
+) {
+	const result = await fetchSource<RawSubmissionAction>({
+		action,
+		course: courseId,
+		work: workId,
+		submission: submissionId
+	});
+	const [row] = shapeContent(courseId, { submissions: [result.submission] }).submissions;
+	publish('submissions', applyContent('submissions', courseId, [row], true));
+	return row;
 }
 
 export function dismiss(id: string, dismissed: boolean) {

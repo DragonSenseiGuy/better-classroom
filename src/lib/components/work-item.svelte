@@ -1,8 +1,9 @@
 <script lang="ts">
 	import * as Item from '#lib/components/ui/item/index.js';
+	import { Badge } from '#lib/components/ui/badge/index.js';
 	import StatusBadge from '#lib/components/status-badge.svelte';
 	import { courseColor, formatDue } from '#lib/format.ts';
-	import type { WorkSummary } from '#lib/work.ts';
+	import { isNew, type WorkSummary } from '#lib/work.ts';
 	import ClipboardListIcon from '@lucide/svelte/icons/clipboard-list';
 	import MessageCircleQuestionIcon from '@lucide/svelte/icons/message-circle-question';
 
@@ -17,7 +18,12 @@
 				{#if isQuestion}<MessageCircleQuestionIcon />{:else}<ClipboardListIcon />{/if}
 			</Item.Media>
 			<Item.Content>
-				<Item.Title class="line-clamp-1">{work.title}</Item.Title>
+				<Item.Title class="line-clamp-1">
+					{work.title}{#if isNew(work)}<Badge
+							variant="secondary"
+							class="ml-2 align-middle text-[10px]">New</Badge
+						>{/if}
+				</Item.Title>
 				<Item.Description class="flex items-center gap-1.5">
 					{#if showCourse}
 						<span class={`size-1.5 shrink-0 rounded-full ${courseColor(work.courseId)}`}></span>
