@@ -11,6 +11,7 @@ import { fetchGoogle, isGoogleConnected } from './google';
 import { config, isConfigured } from './config';
 import { broadcast } from './events';
 import { rebuildSearchIndex } from './search';
+import { syncRichText } from './rich';
 import {
 	applyContent,
 	applyCourses,
@@ -154,6 +155,7 @@ async function doSync(options: { full?: boolean }) {
 			finishedAt: Date.now(),
 			pending: 0
 		});
+		void runRichSync({ full });
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
 		backoffMinutes = QUOTA.test(message)
@@ -161,6 +163,19 @@ async function doSync(options: { full?: boolean }) {
 			: 0;
 		setState({ status: 'error', error: message, finishedAt: Date.now(), pending: 0 });
 	}
+}
+
+let richRunning: Promise<void> | null = null;
+
+export function runRichSync(options: { full?: boolean } = {}): Promise<void> {
+	if (richRunning) return richRunning;
+	richRunning = syncRichText(options, publish)
+		.catch((err) => console.error('rich text sync failed', err))
+		.then(() => undefined)
+		.finally(() => {
+			richRunning = null;
+		});
+	return richRunning;
 }
 
 const clean = (a: Attachment) => ({

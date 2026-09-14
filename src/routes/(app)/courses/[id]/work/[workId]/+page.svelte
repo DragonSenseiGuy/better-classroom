@@ -8,6 +8,7 @@
 	import { Separator } from '#lib/components/ui/separator/index.js';
 	import StatusBadge from '#lib/components/status-badge.svelte';
 	import Attachments from '#lib/components/attachments.svelte';
+	import RichText from '#lib/components/rich-text.svelte';
 	import {
 		displayName,
 		courseColor,
@@ -110,7 +111,11 @@
 		<div>
 			{#if w.description}
 				<h2 class="text-base font-semibold tracking-tight">Instructions</h2>
-				<p class="mt-2 max-w-[70ch] text-sm text-pretty whitespace-pre-wrap">{w.description}</p>
+				<RichText
+					text={w.description}
+					html={w.html}
+					class="mt-2 max-w-[70ch] text-sm text-pretty break-words"
+				/>
 			{:else}
 				<p class="text-sm text-muted-foreground">No instructions were given.</p>
 			{/if}

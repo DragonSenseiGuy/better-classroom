@@ -4,6 +4,7 @@
 	import { courses, materials, topics } from '#lib/db/collections.ts';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import Attachments from '#lib/components/attachments.svelte';
+	import RichText from '#lib/components/rich-text.svelte';
 	import { courseColor, displayName, formatRelative } from '#lib/format.ts';
 	import ExternalLinkIcon from '@lucide/svelte/icons/external-link';
 
@@ -48,7 +49,11 @@
 		{/if}
 	</div>
 	{#if m.description}
-		<p class="mt-6 max-w-[70ch] text-sm text-pretty whitespace-pre-wrap">{m.description}</p>
+		<RichText
+			text={m.description}
+			html={m.html}
+			class="mt-6 max-w-[70ch] text-sm text-pretty break-words"
+		/>
 	{/if}
 	{#if m.materials.length}
 		<h2 class="mt-8 text-base font-semibold tracking-tight">Attachments</h2>

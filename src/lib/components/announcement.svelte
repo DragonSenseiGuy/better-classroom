@@ -1,6 +1,7 @@
 <script lang="ts">
 	import UserAvatar from '#lib/components/user-avatar.svelte';
 	import Attachments from '#lib/components/attachments.svelte';
+	import RichText from '#lib/components/rich-text.svelte';
 	import { courseColor, displayName, formatRelative } from '#lib/format.ts';
 	import type { Announcement, Course } from '#lib/shared/types.ts';
 
@@ -52,11 +53,11 @@
 				>
 			{/if}
 		</div>
-		<p
-			class={`mt-1 text-sm text-pretty break-words whitespace-pre-wrap ${long && !expanded ? 'line-clamp-6' : ''}`}
-		>
-			{item.text}
-		</p>
+		<RichText
+			text={item.text}
+			html={item.html}
+			class={`mt-1 text-sm text-pretty break-words ${long && !expanded ? 'line-clamp-6' : ''}`}
+		/>
 		{#if long}
 			<button
 				type="button"

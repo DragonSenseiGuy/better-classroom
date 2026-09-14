@@ -45,6 +45,7 @@ export type CourseWork = {
 	workType: string;
 	topicId?: string;
 	creatorUserId?: string;
+	html?: string;
 };
 
 export type Material = {
@@ -58,6 +59,7 @@ export type Material = {
 	updatedAt: number;
 	topicId?: string;
 	creatorUserId?: string;
+	html?: string;
 };
 
 export type Announcement = {
@@ -69,6 +71,16 @@ export type Announcement = {
 	createdAt: number;
 	updatedAt: number;
 	creatorUserId?: string;
+	html?: string;
+};
+
+export type RichStatus = {
+	ok: boolean;
+	message?: string;
+	at: number;
+	updated?: number;
+	expired?: boolean;
+	sessionSavedAt?: number;
 };
 
 export type Topic = { id: string; courseId: string; name: string; updatedAt: number };

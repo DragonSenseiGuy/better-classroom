@@ -5,6 +5,7 @@ import type {
 	Course,
 	Dismissal,
 	Profile,
+	RichStatus,
 	RowOf,
 	Snapshot,
 	SyncStatus,
@@ -58,6 +59,43 @@ export function saveConnection(connection: Connection) {
 	setMeta('connection', connection);
 }
 
+export type WebSession = { cookie: string; authuser: number; savedAt: number };
+
+export const getWebSession = () => getMeta<WebSession>('webSession') ?? null;
+
+export function saveWebSession(session: WebSession | null) {
+	if (session) setMeta('webSession', session);
+	else db().query('DELETE FROM meta WHERE key = ?').run('webSession');
+}
+
+export const getRichStatus = () => getMeta<RichStatus>('richStatus') ?? null;
+
+export function saveRichStatus(status: RichStatus) {
+	setMeta('richStatus', status);
+}
+
+type RichTable = 'courseWork' | 'materials' | 'announcements';
+const RICH_TABLES: RichTable[] = ['announcements', 'courseWork', 'materials'];
+
+export function findPost(id: string): { table: RichTable; row: RowOf[RichTable] } | null {
+	for (const table of RICH_TABLES) {
+		const row = db().query(`SELECT id, data FROM ${table} WHERE id = ?`).get(id) as Row | null;
+		if (row) return { table, row: JSON.parse(row.data) as RowOf[RichTable] };
+	}
+	return null;
+}
+
+export function setPostHtml<K extends RichTable>(
+	table: K,
+	row: RowOf[K],
+	html: string
+): Change<RowOf[K]> | null {
+	if (row.html === html) return null;
+	const next = { ...row, html };
+	db().query(`UPDATE ${table} SET data = ? WHERE id = ?`).run(JSON.stringify(next), row.id);
+	return { type: 'update', key: row.id, value: next };
+}
+
 export function getProfile() {
 	return getMeta<Profile>('profile') ?? null;
 }
@@ -100,6 +138,16 @@ export function snapshot(sync: SyncStatus): Snapshot {
 		profile: getProfile(),
 		sync
 	};
+}
+
+type MaybeRich = { html?: string; updatedAt?: number };
+
+function keepHtml<T>(prev: T | undefined, fresh: T): T {
+	const p = prev as MaybeRich | undefined;
+	const f = fresh as MaybeRich;
+	if (!p || p.html === undefined || f.html !== undefined || p.updatedAt !== f.updatedAt)
+		return fresh;
+	return { ...fresh, html: p.html };
 }
 
 function stable(value: unknown): string {
@@ -227,9 +275,10 @@ export function applyContent<K extends ContentTable>(
 	const remove = d.query(`DELETE FROM ${table} WHERE id = ?`);
 	d.transaction(() => {
 		const seen = new Set<string>();
-		for (const row of incoming) {
-			seen.add(row.id);
-			const prev = existing.get(row.id);
+		for (const fresh of incoming) {
+			seen.add(fresh.id);
+			const prev = existing.get(fresh.id);
+			const row = keepHtml(prev, fresh);
 			if (!prev) changes.push({ type: 'insert', key: row.id, value: row });
 			else if (stable(prev) !== stable(row))
 				changes.push({ type: 'update', key: row.id, value: row });
