@@ -148,7 +148,8 @@ export async function rotateSession(jar: CookieJar): Promise<Rotation> {
 	absorb(jar, res);
 	if (res.status >= 300 && res.status < 400) {
 		const to = res.headers.get('location') ?? '';
-		if (/ServiceLogin|\/v3\/signin/.test(to)) throw new SessionError('Google asked for a sign-in.');
+		if (/ServiceLogin|\/v3\/signin/.test(to))
+			throw new SessionError('Google asked for a sign-in when rotating the device cookies.');
 	}
 	if (res.status === 429) return { rotated: false, nextSeconds: 600 };
 	if (!res.ok) throw new Error(`RotateCookies responded ${res.status}`);
@@ -224,7 +225,8 @@ export async function loadTokens(jar: CookieJar, authuser: number): Promise<WebT
 	absorb(jar, res);
 	if (res.status >= 300 && res.status < 400) {
 		const to = res.headers.get('location') ?? '';
-		if (/accounts\.google\.com/.test(to)) throw new SessionError('Google asked for a sign-in.');
+		if (/accounts\.google\.com/.test(to))
+			throw new SessionError('Google asked for a sign-in when loading the Classroom page.');
 		throw new SessionError(`Classroom redirected to ${to.slice(0, 80)}`);
 	}
 	if (!res.ok) throw new SessionError(`Classroom responded ${res.status}`);

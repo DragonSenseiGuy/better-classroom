@@ -371,7 +371,12 @@
 				{/if}
 				{#if cookieOpen}
 					<ol class="max-w-prose list-decimal space-y-1 pl-5 text-muted-foreground">
-						<li>Open classroom.google.com in Chrome, signed in with your school account.</li>
+						<li>
+							Open classroom.google.com in a browser profile you use for nothing else, signed in
+							with your school account. Google rotates the session cookie from any open Google
+							tab, and two rotators on one session get the whole account signed out, so this
+							profile must stay closed once the cookie is copied.
+						</li>
 						<li>
 							Open DevTools → Network, reload, click the first <span class="font-mono"
 								>classroom.google.com</span
@@ -397,7 +402,7 @@
 								/>{:else}<PlugZapIcon data-icon="inline-start" />{/if}Save and test
 						</Button>
 						<span class="text-xs text-muted-foreground"
-							>Google sessions last a couple of weeks. Paste a fresh one when the badge says
+							>The app keeps the session alive itself. Paste a fresh one when the badge says
 							expired.</span
 						>
 					</div>
