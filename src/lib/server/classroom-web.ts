@@ -107,16 +107,54 @@ const XHR_HEADERS = {
 };
 
 /**
- * Keep-alive that stays inside Classroom: a plain page fetch returns fresh
- * SIDCC / __Secure-*PSIDCC cookies which the jar absorbs. It deliberately
- * does not touch accounts.google.com/RotateCookies — that endpoint expects a
- * device-bound proof only a real Chrome profile can produce, and a malformed
- * call there is a reliable way to get the whole session invalidated.
+ * Refreshes the short-lived SIDCC / __Secure-*PSIDCC cookies with a plain
+ * Classroom page fetch; the jar absorbs the Set-Cookie headers.
  */
 export async function refreshSession(jar: CookieJar, authuser: number): Promise<boolean> {
 	const before = jar.cookie;
 	await loadTokens(jar, authuser);
 	return jar.cookie !== before;
+}
+
+export type Rotation = { rotated: boolean; nextSeconds: number };
+
+/**
+ * Rotates the device-session cookies (__Secure-1PSIDTS / 3PSIDTS) the way
+ * Chrome's background timer does. As of 2026-09 Google authenticates this
+ * endpoint by cookies alone, with no device-bound challenge, for both Chrome
+ * and Firefox sessions; the earlier failure here came from omitting the
+ * same-origin Origin header, which makes the request look cross-site.
+ * The response body `[["identity.hfcr", 600], ...]` names the next interval.
+ * Prior art: teng-lin/notebooklm-py#345.
+ */
+export async function rotateSession(jar: CookieJar): Promise<Rotation> {
+	const res = await fetch('https://accounts.google.com/RotateCookies', {
+		method: 'POST',
+		headers: {
+			...CLIENT_HINTS,
+			cookie: jar.cookie,
+			'content-type': 'application/json',
+			origin: 'https://accounts.google.com',
+			referer: 'https://accounts.google.com/RotateCookiesPage',
+			'sec-fetch-site': 'same-origin',
+			'sec-fetch-mode': 'cors',
+			'sec-fetch-dest': 'empty'
+		},
+		body: '[000,"-0000000000000000000"]',
+		redirect: 'manual',
+		signal: AbortSignal.timeout(30_000)
+	});
+	const before = jar.cookie;
+	absorb(jar, res);
+	if (res.status >= 300 && res.status < 400) {
+		const to = res.headers.get('location') ?? '';
+		if (/ServiceLogin|\/v3\/signin/.test(to)) throw new SessionError('Google asked for a sign-in.');
+	}
+	if (res.status === 429) return { rotated: false, nextSeconds: 600 };
+	if (!res.ok) throw new Error(`RotateCookies responded ${res.status}`);
+	const text = await res.text();
+	const next = Number(text.match(/"identity\.hfcr",\s*(\d+)/)?.[1] ?? 600);
+	return { rotated: jar.cookie !== before, nextSeconds: Math.max(60, next) };
 }
 
 const FIELD_MASK =

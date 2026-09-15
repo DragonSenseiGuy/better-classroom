@@ -5,6 +5,7 @@ import {
 	fetchStreamPage,
 	loadTokens,
 	refreshSession,
+	rotateSession,
 	type CookieJar,
 	type RawCapture,
 	type StreamItem,
@@ -46,32 +47,40 @@ async function tokensFor(session: WebSession, jar: CookieJar, fresh = false) {
 	const key = `${session.authuser}:${session.savedAt}`;
 	if (!fresh && cached && cached.key === key && Date.now() - cached.at < TOKEN_TTL)
 		return cached.tokens;
+	await rotateIfDue(jar);
 	const tokens = await loadTokens(jar, session.authuser);
 	lastRefresh = Date.now();
 	cached = { key, tokens, at: Date.now() };
 	return tokens;
 }
 
-const REFRESH_EVERY = 10 * 60_000;
 let lastRefresh = 0;
+let nextRotateAt = 0;
 
-async function keepAlive(jar: CookieJar, authuser: number) {
-	if (Date.now() - lastRefresh < REFRESH_EVERY) return;
-	await refreshSession(jar, authuser);
-	lastRefresh = Date.now();
+async function rotateIfDue(jar: CookieJar) {
+	if (Date.now() < nextRotateAt) return;
+	const { nextSeconds } = await rotateSession(jar);
+	nextRotateAt = Date.now() + nextSeconds * 1000;
 }
 
-/** Periodic keep-alive; the scheduler calls this between syncs. */
+/**
+ * Periodic keep-alive; the scheduler calls this between syncs. Rotates the
+ * device-session cookies on the cadence Google reports (10 minutes) and
+ * refreshes the short-lived ones with a page fetch.
+ */
 export async function refreshSavedSession(): Promise<RichStatus | null> {
 	const session = getWebSession();
 	if (!session) return null;
 	const previous = getRichStatus();
 	if (previous && !previous.ok && previous.expired && previous.sessionSavedAt === session.savedAt)
 		return previous;
-	if (Date.now() - lastRefresh < REFRESH_EVERY) return previous;
 	try {
-		await refreshSession(jarFor(session), session.authuser);
-		lastRefresh = Date.now();
+		const jar = jarFor(session);
+		await rotateIfDue(jar);
+		if (Date.now() - lastRefresh >= 10 * 60_000) {
+			await refreshSession(jar, session.authuser);
+			lastRefresh = Date.now();
+		}
 		return previous;
 	} catch (err) {
 		const status = failure(err, session);

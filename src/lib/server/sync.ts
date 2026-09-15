@@ -367,7 +367,7 @@ function scheduleNext() {
 	}, minutes * 60_000);
 }
 
-const KEEP_ALIVE_MINUTES = 10;
+const KEEP_ALIVE_MINUTES = 5;
 
 export function startScheduler() {
 	if (timer) return;
