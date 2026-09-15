@@ -92,6 +92,16 @@ export type RichStatus = {
 
 export type KeepAlive = { rotatedAt?: number; refreshedAt?: number; nextRotateAt?: number };
 
+export type Comment = {
+	id: string;
+	authorId: string;
+	author?: Author;
+	mine: boolean;
+	text: string;
+	html?: string;
+	createdAt?: number;
+};
+
 export type ProviderId = 'google' | 'apps-script' | 'web';
 export type ProviderRole = 'records' | 'enrichment';
 export type ProviderState = 'off' | 'ready' | 'expired' | 'error';

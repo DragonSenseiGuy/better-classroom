@@ -4,7 +4,13 @@ import type {
 	RawOverview,
 	RawSubmissionAction
 } from './classroom';
-import type { Change, CollectionName, ProviderStatus, RichStatus } from '#lib/shared/types.ts';
+import type {
+	Change,
+	CollectionName,
+	Comment,
+	ProviderStatus,
+	RichStatus
+} from '#lib/shared/types.ts';
 
 export type Publish = (collection: CollectionName, changes: Change[]) => void;
 
@@ -42,6 +48,11 @@ export type Enricher = {
 		courseId: string,
 		workId: string
 	): Promise<{ turnedIn: boolean }>;
+	comments?: {
+		list(courseId: string, workId: string): Promise<Comment[]>;
+		post(courseId: string, workId: string, text: string): Promise<Comment | null>;
+		remove(courseId: string, workId: string, commentId: string): Promise<void>;
+	};
 };
 
 export type Provider = {

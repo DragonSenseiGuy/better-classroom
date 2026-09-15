@@ -6,8 +6,11 @@ import {
 	loadTokens,
 	refreshSession,
 	rotateSession,
+	listComments,
+	writeComment,
 	writeSubmissionState,
 	type CookieJar,
+	type WebComment,
 	type RawCapture,
 	type StreamItem,
 	type WebTokens
@@ -31,7 +34,7 @@ import {
 	type WebSession
 } from './store';
 import type { Provider, Publish } from './providers';
-import type { Author, Change, CollectionName, RichStatus } from '#lib/shared/types.ts';
+import type { Author, Change, CollectionName, Comment, RichStatus } from '#lib/shared/types.ts';
 
 const PAGE_SIZE = 50;
 const MAX_PAGES = 60;
@@ -289,8 +292,77 @@ export const webProvider: Provider = {
 						: 'Cookie saved.'
 		};
 	},
-	enrich: { enrich: syncRichText, keepAlive: refreshSavedSession, submissionAction }
+	enrich: {
+		enrich: syncRichText,
+		keepAlive: refreshSavedSession,
+		submissionAction,
+		comments: { list: listWebComments, post: postWebComment, remove: removeWebComment }
+	}
 };
+
+async function webContext() {
+	const session = getWebSession();
+	if (!session) throw new Error('No Classroom session saved.');
+	const studentId = myWebId();
+	if (!studentId) throw new Error('Your Classroom web id is not known yet; run a sync first.');
+	const jar = jarFor(session);
+	const tokens = await tokensFor(session, jar);
+	return { session, studentId, jar, tokens };
+}
+
+function shapeComment(c: WebComment, studentId: string): Comment {
+	const profile = getWebProfiles()[c.authorId];
+	return {
+		id: c.id,
+		authorId: c.authorId,
+		author: profile && profile.name ? profile : undefined,
+		mine: c.authorId === studentId,
+		text: c.text,
+		html: c.html,
+		createdAt: c.createdAt
+	};
+}
+
+async function listWebComments(courseId: string, workId: string): Promise<Comment[]> {
+	const { session, studentId, jar, tokens } = await webContext();
+	const found = await listComments(jar, session.authuser, tokens, studentId, workId, courseId);
+	const missing = found.map((c) => c.authorId).filter((id) => id && !(id in getWebProfiles()));
+	if (missing.length) {
+		const ctx: Ctx = { session, jar, tokens, profiles: getWebProfiles(), publish: () => {} };
+		await resolveAuthors(ctx, missing);
+	}
+	return found.map((c) => shapeComment(c, studentId));
+}
+
+async function postWebComment(courseId: string, workId: string, text: string) {
+	const { session, studentId, jar, tokens } = await webContext();
+	const created = await writeComment(
+		'create',
+		jar,
+		session.authuser,
+		tokens,
+		studentId,
+		workId,
+		courseId,
+		text
+	);
+	return created ? shapeComment(created, studentId) : null;
+}
+
+async function removeWebComment(courseId: string, workId: string, commentId: string) {
+	const { session, studentId, jar, tokens } = await webContext();
+	await writeComment(
+		'delete',
+		jar,
+		session.authuser,
+		tokens,
+		studentId,
+		workId,
+		courseId,
+		'',
+		commentId
+	);
+}
 
 /** The signed-in student's web-side id, matched by email among synced profiles. */
 function myWebId(): string | null {

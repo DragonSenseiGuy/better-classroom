@@ -404,6 +404,101 @@ export async function writeSubmissionState(
 	return parseSubmission(payload);
 }
 
+// ---- private comments (RPCs sLc6hf QueryComment / jOFnxd WriteComment) ----
+//
+// Comment key: [commentId|null, null, submissionKey, 3]; 3 = private comment
+// on a submission. Captured from the web app on 2026-09-15.
+
+const COMMENT_QUERY_RPC = 'sLc6hf';
+const COMMENT_WRITE_RPC = 'jOFnxd';
+const COMMENT_MASK = '[1,1,1,1,null,null,[1],1,null,3,[1,null,1]]';
+
+export type WebComment = {
+	id: string;
+	authorId: string;
+	text: string;
+	html?: string;
+	createdAt?: number;
+};
+
+const escapeHtml = (s: string) =>
+	s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+function commentProto(commentKey: string, authorId: string, text: string) {
+	const rich = JSON.stringify(['edu.rt', text, null, null, [null, escapeHtml(text)]]);
+	return `[${commentKey},null,null,null,[${authorId}],null,null,null,[1],null,null,${rich}]`;
+}
+
+export async function listComments(
+	jar: CookieJar,
+	authuser: number,
+	tokens: WebTokens,
+	studentId: string,
+	workId: string,
+	courseId: string
+): Promise<WebComment[]> {
+	const key = `[${studentId},[${workId},[${courseId}]]]`;
+	const payload = await callRpc(
+		jar,
+		authuser,
+		tokens,
+		COMMENT_QUERY_RPC,
+		`[[null,null,2,0],${COMMENT_MASK},[null,null,null,[${key}]]]`,
+		`/u/${authuser}/c/${encodeCourseId(courseId)}/a/${encodeCourseId(workId)}/details`,
+		undefined,
+		submissionContext(courseId)
+	);
+	const entries = Array.isArray(payload) && Array.isArray(payload[2]) ? payload[2] : [];
+	return entries.map(parseComment).filter((c): c is WebComment => c !== null);
+}
+
+export async function writeComment(
+	verb: 'create' | 'delete',
+	jar: CookieJar,
+	authuser: number,
+	tokens: WebTokens,
+	studentId: string,
+	workId: string,
+	courseId: string,
+	text: string,
+	commentId?: string
+): Promise<WebComment | null> {
+	const key = `[${studentId},[${workId},[${courseId}]]]`;
+	const commentKey = `[${commentId ?? 'null'},null,${key},3]`;
+	const args = `[[${verb === 'create' ? 2 : 4}],[[${commentKey},${commentProto(commentKey, studentId, text)}]],${COMMENT_MASK}]`;
+	const payload = await callRpc(
+		jar,
+		authuser,
+		tokens,
+		COMMENT_WRITE_RPC,
+		args,
+		`/u/${authuser}/c/${encodeCourseId(courseId)}/a/${encodeCourseId(workId)}/details`,
+		undefined,
+		submissionContext(courseId)
+	);
+	const record = Array.isArray(payload) && Array.isArray(payload[1]) ? payload[1][0] : null;
+	return parseComment(record as Json);
+}
+
+function parseComment(node: Json): WebComment | null {
+	if (!Array.isArray(node)) return null;
+	const head = node[0];
+	if (!Array.isArray(head) || head[0] == null) return null;
+	const rich = node.find((v) => Array.isArray(v) && v[0] === 'edu.rt') as Json[] | undefined;
+	const author = Array.isArray(node[4]) ? node[4][0] : undefined;
+	const createdAt = node.slice(1, 4).find((v) => typeof v === 'number' && v > 1e12) as
+		| number
+		| undefined;
+	const box = rich?.[4];
+	return {
+		id: String(head[0]),
+		authorId: author != null ? String(author) : '',
+		text: typeof rich?.[1] === 'string' ? rich[1] : '',
+		html: Array.isArray(box) && typeof box[1] === 'string' ? box[1] : undefined,
+		createdAt
+	};
+}
+
 /** Response is `["hrw.sub", [record]]`; record[5] === 2 with record[21] a
  *  timestamp means turned in; record[4] lists attachments. */
 function parseSubmission(payload: Json): WebSubmission {
