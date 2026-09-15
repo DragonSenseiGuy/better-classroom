@@ -102,6 +102,8 @@ export type Comment = {
 	createdAt?: number;
 };
 
+export type SubmissionFile = { driveId: string; title?: string; mime: string; url?: string };
+
 export type ProviderId = 'google' | 'apps-script' | 'web';
 export type ProviderRole = 'records' | 'enrichment';
 export type ProviderState = 'off' | 'ready' | 'expired' | 'error';

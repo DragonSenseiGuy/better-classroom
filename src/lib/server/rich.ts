@@ -7,6 +7,9 @@ import {
 	refreshSession,
 	rotateSession,
 	listComments,
+	querySubmissionAttachments,
+	uploadToDrive,
+	writeAttachments,
 	writeComment,
 	writeSubmissionState,
 	type CookieJar,
@@ -34,7 +37,14 @@ import {
 	type WebSession
 } from './store';
 import type { Provider, Publish } from './providers';
-import type { Author, Change, CollectionName, Comment, RichStatus } from '#lib/shared/types.ts';
+import type {
+	Author,
+	Change,
+	CollectionName,
+	Comment,
+	RichStatus,
+	SubmissionFile
+} from '#lib/shared/types.ts';
 
 const PAGE_SIZE = 50;
 const MAX_PAGES = 60;
@@ -296,9 +306,51 @@ export const webProvider: Provider = {
 		enrich: syncRichText,
 		keepAlive: refreshSavedSession,
 		submissionAction,
-		comments: { list: listWebComments, post: postWebComment, remove: removeWebComment }
+		comments: { list: listWebComments, post: postWebComment, remove: removeWebComment },
+		attachments: { list: listWebFiles, upload: uploadWebFile, remove: removeWebFile }
 	}
 };
+
+async function listWebFiles(courseId: string, workId: string): Promise<SubmissionFile[]> {
+	const { session, jar, tokens } = await webContext();
+	return querySubmissionAttachments(jar, session.authuser, tokens, workId, courseId);
+}
+
+async function uploadWebFile(
+	courseId: string,
+	workId: string,
+	file: { name: string; type: string; bytes: Uint8Array }
+): Promise<SubmissionFile[]> {
+	const { session, studentId, jar, tokens } = await webContext();
+	const a = session.authuser;
+	const current = await querySubmissionAttachments(jar, a, tokens, workId, courseId);
+	const { id } = await uploadToDrive(jar, a, file);
+	await writeAttachments(jar, a, tokens, studentId, workId, courseId, [
+		...current,
+		{ driveId: id, mime: file.type }
+	]);
+	const after = await querySubmissionAttachments(jar, a, tokens, workId, courseId);
+	if (!after.some((f) => f.driveId === id))
+		throw new Error('Classroom did not accept the file. Unsubmit first if the work is turned in.');
+	return after;
+}
+
+async function removeWebFile(
+	courseId: string,
+	workId: string,
+	driveId: string
+): Promise<SubmissionFile[]> {
+	const { session, studentId, jar, tokens } = await webContext();
+	const a = session.authuser;
+	const current = await querySubmissionAttachments(jar, a, tokens, workId, courseId);
+	if (!current.some((f) => f.driveId === driveId)) throw new Error('That file is no longer attached.');
+	const remaining = current.filter((f) => f.driveId !== driveId);
+	await writeAttachments(jar, a, tokens, studentId, workId, courseId, remaining);
+	const after = await querySubmissionAttachments(jar, a, tokens, workId, courseId);
+	if (after.some((f) => f.driveId === driveId))
+		throw new Error('Classroom did not remove the file. Unsubmit first if the work is turned in.');
+	return after;
+}
 
 async function webContext() {
 	const session = getWebSession();

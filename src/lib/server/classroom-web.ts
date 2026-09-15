@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { decode, type Json } from './classroom/proto';
 import {
 	MEMBERS,
@@ -399,6 +400,137 @@ export async function writeSubmissionState(
 		args,
 		`/u/${authuser}/c/${encodeCourseId(courseId)}/a/${encodeCourseId(workId)}/details`,
 		capture,
+		submissionContext(courseId)
+	);
+	return parseSubmission(payload);
+}
+
+// ---- attachments -----------------------------------------------------------
+//
+// Files go to Drive first through the same resumable upload the web app's
+// picker uses (cookie + x-goog-authuser, no OAuth token), then WriteSubmission
+// with the "save attachments" control lists the Drive id. Removal re-sends
+// the spec with its trailing flag set to 2. All live-confirmed 2026-09-15.
+
+const DRIVE_UPLOAD =
+	'https://clients6.google.com/upload/drive/v2internal/files?uploadType=resumable&supportsTeamDrives=true&OriginatorHint=CLASSROOM&fields=id%2Ctitle%2CmimeType&key=AIzaSyAw-cTyp9Xotzvu3vNDWhDU3E9NConkKxQ';
+
+export type WebAttachment = { title?: string; driveId: string; mime: string; url?: string };
+
+export async function querySubmissionAttachments(
+	jar: CookieJar,
+	authuser: number,
+	tokens: WebTokens,
+	workId: string,
+	courseId: string
+): Promise<WebAttachment[]> {
+	const payload = await callRpc(
+		jar,
+		authuser,
+		tokens,
+		'Zj93ge',
+		`[[null,null,2,0],${SUBMISSION_MASK},[null,[[${workId},[${courseId}]]],null]]`,
+		`/u/${authuser}/c/${encodeCourseId(courseId)}/a/${encodeCourseId(workId)}/details`,
+		undefined,
+		submissionContext(courseId)
+	);
+	const record = Array.isArray(payload) && Array.isArray(payload[2]) ? payload[2][0] : null;
+	if (!Array.isArray(record) || !Array.isArray(record[4])) return [];
+	return record[4]
+		.filter((a): a is Json[] => Array.isArray(a) && typeof a[2] === 'string')
+		.map((a) => ({
+			title: typeof a[0] === 'string' ? a[0] : undefined,
+			driveId: a[2] as string,
+			mime: typeof a[4] === 'string' ? a[4] : 'application/octet-stream',
+			url: typeof a[6] === 'string' ? a[6] : undefined
+		}));
+}
+
+export async function uploadToDrive(
+	jar: CookieJar,
+	authuser: number,
+	file: { name: string; type: string; bytes: Uint8Array }
+): Promise<{ id: string }> {
+	// clients6 authenticates a cookie session by SAPISIDHASH: sha1 of
+	// "<unix seconds> <SAPISID> <origin>", which HAR exports do not show.
+	const sapisid = jar.cookie.match(/(?:^|;\s*)SAPISID=([^;]+)/)?.[1];
+	if (!sapisid) throw new SessionError('The saved cookie has no SAPISID.');
+	const origin = 'https://drive.google.com';
+	const ts = Math.floor(Date.now() / 1000);
+	const digest = createHash('sha1').update(`${ts} ${sapisid} ${origin}`).digest('hex');
+	const common = {
+		...CLIENT_HINTS,
+		cookie: jar.cookie,
+		origin,
+		referer: `${origin}/`,
+		authorization: `SAPISIDHASH ${ts}_${digest}`,
+		'x-goog-authuser': String(authuser),
+		'x-goog-ext-525001598-jspb':
+			'W1s5MDcsbnVsbCxudWxsLG51bGwsMCxudWxsLG51bGwsIkNMQVNTUk9PTSIsbnVsbCxudWxsLG51bGwsWzJdXV0='
+	};
+	const init = await fetch(DRIVE_UPLOAD, {
+		method: 'POST',
+		headers: {
+			...common,
+			'content-type': 'application/json',
+			'x-upload-content-type': file.type,
+			'x-upload-content-length': String(file.bytes.byteLength)
+		},
+		body: JSON.stringify({
+			title: file.name,
+			mimeType: file.type,
+			modifiedDate: new Date().toISOString()
+		}),
+		signal: AbortSignal.timeout(60_000)
+	});
+	absorb(jar, init);
+	const location = init.headers.get('location');
+	if (!init.ok || !location) throw new Error(`Drive upload init failed (${init.status})`);
+	const put = await fetch(location, {
+		method: 'PUT',
+		headers: {
+			...common,
+			'content-type': file.type,
+			'content-range': `bytes 0-${file.bytes.byteLength - 1}/${file.bytes.byteLength}`
+		},
+		body: new Blob([file.bytes as Uint8Array<ArrayBuffer>], { type: file.type }),
+		signal: AbortSignal.timeout(300_000)
+	});
+	absorb(jar, put);
+	if (!put.ok) throw new Error(`Drive upload failed (${put.status})`);
+	const meta = (await put.json()) as { id?: string };
+	if (!meta.id) throw new Error('Drive upload returned no file id');
+	return { id: meta.id };
+}
+
+const attachmentSpec = (f: { driveId: string; mime: string }) =>
+	`[null,null,${JSON.stringify(f.driveId)},2,${JSON.stringify(f.mime)},null,null,1,null,null,null,null,null,null,[null,2],null,null,null,null,null,1]`;
+
+/**
+ * Replaces the submission's attachment list with `files`. Only applies while
+ * the submission is not turned in; the echoed record is not trustworthy, so
+ * callers read back with querySubmissionAttachments.
+ */
+export async function writeAttachments(
+	jar: CookieJar,
+	authuser: number,
+	tokens: WebTokens,
+	studentId: string,
+	workId: string,
+	courseId: string,
+	files: { driveId: string; mime: string }[]
+): Promise<WebSubmission> {
+	const key = `[${studentId},[${workId},[${courseId}]]]`;
+	const submission = `[${key},null,null,null,[${files.map(attachmentSpec).join(',')}]]`;
+	const args = `[[3],[[${key},${submission},[null,1]]],${SUBMISSION_MASK}]`;
+	const payload = await callRpc(
+		jar,
+		authuser,
+		tokens,
+		SUBMISSION_RPC,
+		args,
+		`/u/${authuser}/c/${encodeCourseId(courseId)}/a/${encodeCourseId(workId)}/details`,
+		undefined,
 		submissionContext(courseId)
 	);
 	return parseSubmission(payload);

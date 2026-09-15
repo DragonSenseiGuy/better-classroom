@@ -21,8 +21,10 @@
 	import ExternalLinkIcon from '@lucide/svelte/icons/external-link';
 	import LoaderIcon from '@lucide/svelte/icons/loader-circle';
 	import { notify } from '#lib/toast.ts';
-	import type { Comment } from '#lib/shared/types.ts';
+	import type { Comment, SubmissionFile } from '#lib/shared/types.ts';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
+	import PaperclipIcon from '@lucide/svelte/icons/paperclip';
+	import XIcon from '@lucide/svelte/icons/x';
 
 	let comments = $state<Comment[] | null>(null);
 	let commentsError = $state<string | null>(null);
@@ -88,6 +90,73 @@
 
 	$effect(() => {
 		if (w && sub && comments === null) void loadComments();
+	});
+
+	let files = $state<SubmissionFile[] | null>(null);
+	let filesError = $state<string | null>(null);
+	let uploading = $state(false);
+	let removingFile = $state<string | null>(null);
+
+	const fail = async (res: Response) =>
+		new Error((await res.text()).replace(/^.*"message":"([^"]*)".*$/s, '$1'));
+
+	async function loadFiles() {
+		if (!w) return;
+		filesError = null;
+		const res = await fetch(`/api/attachments?${commentParams()}`);
+		if (!res.ok) {
+			filesError = (await fail(res)).message;
+			files = [];
+			return;
+		}
+		files = ((await res.json()) as { files: SubmissionFile[] }).files;
+	}
+
+	async function uploadFile(e: Event) {
+		const input = e.currentTarget as HTMLInputElement;
+		const file = input.files?.[0];
+		input.value = '';
+		if (!w || !file) return;
+		uploading = true;
+		try {
+			const body = new FormData();
+			body.append('file', file);
+			const res = await fetch(`/api/attachments?${commentParams()}`, { method: 'POST', body });
+			if (!res.ok) throw await fail(res);
+			files = ((await res.json()) as { files: SubmissionFile[] }).files;
+			notify('emerald', 'File attached', { description: file.name });
+		} catch (err) {
+			notify('rose', 'Could not attach file', {
+				description: err instanceof Error ? err.message : String(err),
+				duration: 10000
+			});
+		} finally {
+			uploading = false;
+		}
+	}
+
+	async function removeFile(driveId: string) {
+		if (!w) return;
+		removingFile = driveId;
+		try {
+			const res = await fetch('/api/attachments', {
+				method: 'DELETE',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ courseId: w.courseId, workId: w.id, driveId })
+			});
+			if (!res.ok) throw await fail(res);
+			files = ((await res.json()) as { files: SubmissionFile[] }).files;
+		} catch (err) {
+			notify('rose', 'Could not remove file', {
+				description: err instanceof Error ? err.message : String(err)
+			});
+		} finally {
+			removingFile = null;
+		}
+	}
+
+	$effect(() => {
+		if (w && sub && files === null) void loadFiles();
 	});
 
 	let acting = $state<'turnIn' | 'reclaim' | null>(null);
@@ -237,11 +306,53 @@
 						<Progress value={(w.assignedGrade / w.maxPoints) * 100} class="mt-2" />
 					</div>
 				{/if}
-				{#if sub.attachments.length}
-					<Separator class="my-4" />
-					<Attachments items={sub.attachments} />
-				{:else if w.status === 'assigned' || w.status === 'missing'}
-					<p class="mt-3 text-sm text-muted-foreground">Nothing attached yet.</p>
+				<Separator class="my-4" />
+				{#if filesError}
+					{#if sub.attachments.length}
+						<Attachments items={sub.attachments} />
+					{:else}
+						<p class="text-sm text-muted-foreground">Nothing attached yet.</p>
+					{/if}
+				{:else if files === null}
+					<p class="text-sm text-muted-foreground">Loading files…</p>
+				{:else}
+					{#if files.length === 0}
+						<p class="text-sm text-muted-foreground">Nothing attached yet.</p>
+					{:else}
+						<ul role="list" class="space-y-1.5 text-sm">
+							{#each files as f (f.driveId)}
+								<li class="group flex items-center gap-2 rounded-lg border px-3 py-2">
+									<PaperclipIcon class="size-3.5 shrink-0 text-muted-foreground" />
+									<a
+										href={f.url ?? `https://drive.google.com/file/d/${f.driveId}/view`}
+										target="_blank"
+										rel="noreferrer"
+										class="min-w-0 flex-1 truncate underline-offset-2 hover:underline">{f.title ?? f.driveId}</a
+									>
+									{#if w.status === 'assigned' || w.status === 'missing'}
+										<button
+											type="button"
+											class="rounded p-0.5 text-muted-foreground hover:text-destructive disabled:opacity-50"
+											aria-label="Remove file"
+											disabled={removingFile === f.driveId}
+											onclick={() => removeFile(f.driveId)}
+										>
+											{#if removingFile === f.driveId}<LoaderIcon class="size-3.5 animate-spin" />{:else}<XIcon class="size-3.5" />{/if}
+										</button>
+									{/if}
+								</li>
+							{/each}
+						</ul>
+					{/if}
+					{#if w.status === 'assigned' || w.status === 'missing'}
+						<label
+							class="mt-2 inline-flex cursor-pointer items-center gap-2 text-sm font-medium text-foreground underline-offset-2 hover:underline"
+						>
+							{#if uploading}<LoaderIcon class="size-3.5 animate-spin" />{:else}<PaperclipIcon class="size-3.5" />{/if}
+							{uploading ? 'Uploading…' : 'Add file'}
+							<input type="file" class="sr-only" disabled={uploading} onchange={uploadFile} />
+						</label>
+					{/if}
 				{/if}
 				<div class="mt-4 flex flex-wrap gap-2">
 					{#if w.status === 'assigned' || w.status === 'missing'}

@@ -9,7 +9,8 @@ import type {
 	CollectionName,
 	Comment,
 	ProviderStatus,
-	RichStatus
+	RichStatus,
+	SubmissionFile
 } from '#lib/shared/types.ts';
 
 export type Publish = (collection: CollectionName, changes: Change[]) => void;
@@ -52,6 +53,15 @@ export type Enricher = {
 		list(courseId: string, workId: string): Promise<Comment[]>;
 		post(courseId: string, workId: string, text: string): Promise<Comment | null>;
 		remove(courseId: string, workId: string, commentId: string): Promise<void>;
+	};
+	attachments?: {
+		list(courseId: string, workId: string): Promise<SubmissionFile[]>;
+		upload(
+			courseId: string,
+			workId: string,
+			file: { name: string; type: string; bytes: Uint8Array }
+		): Promise<SubmissionFile[]>;
+		remove(courseId: string, workId: string, driveId: string): Promise<SubmissionFile[]>;
 	};
 };
 
