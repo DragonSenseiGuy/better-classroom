@@ -5,6 +5,7 @@ import type {
 	CollectionName,
 	Course,
 	Dismissal,
+	KeepAlive,
 	Profile,
 	RichStatus,
 	RowOf,
@@ -65,8 +66,17 @@ export type WebSession = { cookie: string; authuser: number; savedAt: number };
 export const getWebSession = () => getMeta<WebSession>('webSession') ?? null;
 
 export function saveWebSession(session: WebSession | null) {
+	const previous = getWebSession();
 	if (session) setMeta('webSession', session);
 	else db().query('DELETE FROM meta WHERE key = ?').run('webSession');
+	if (previous?.savedAt !== session?.savedAt)
+		db().query('DELETE FROM meta WHERE key = ?').run('webKeepAlive');
+}
+
+export const getKeepAlive = () => getMeta<KeepAlive>('webKeepAlive') ?? {};
+
+export function saveKeepAlive(state: KeepAlive) {
+	setMeta('webKeepAlive', state);
 }
 
 export const getRichStatus = () => getMeta<RichStatus>('richStatus') ?? null;

@@ -174,6 +174,7 @@
 						sample: number;
 						savedAt: number;
 						status: typeof rich.status;
+						keepAlive: typeof rich.keepAlive;
 				  }
 				| { ok: false; message: string };
 			if (result.ok) {
@@ -181,7 +182,8 @@
 					configured: true,
 					savedAt: result.savedAt,
 					authuser: result.authuser,
-					status: result.status
+					status: result.status,
+					keepAlive: result.keepAlive
 				};
 				cookieDraft = '';
 				cookieOpen = false;
@@ -209,6 +211,9 @@
 		const res = await fetch('/api/rich');
 		rich = (await res.json()) as typeof rich;
 	}
+	const keptAliveAt = $derived(
+		Math.max(rich.keepAlive?.rotatedAt ?? 0, rich.keepAlive?.refreshedAt ?? 0) || undefined
+	);
 
 	const shortUrl = $derived(
 		data.connection.url.replace('https://script.google.com/macros/s/', '…/').replace(/\/exec$/, '')
@@ -330,11 +335,17 @@
 					local database and is only ever sent to classroom.google.com.
 				</p>
 				{#if rich.configured}
-					<dl class="grid grid-cols-2 gap-x-4 gap-y-4 sm:grid-cols-4">
+					<dl class="grid grid-cols-2 gap-x-4 gap-y-4 sm:grid-cols-3 lg:grid-cols-5">
 						<div>
 							<dt class="text-muted-foreground">Cookie saved</dt>
 							<dd class="mt-1 font-medium tabular-nums">
 								{rich.savedAt ? formatRelative(rich.savedAt) : '–'}
+							</dd>
+						</div>
+						<div>
+							<dt class="text-muted-foreground">Kept alive</dt>
+							<dd class="mt-1 font-medium tabular-nums">
+								{keptAliveAt ? formatRelative(keptAliveAt) : '–'}
 							</dd>
 						</div>
 						<div>

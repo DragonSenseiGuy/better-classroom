@@ -90,6 +90,8 @@ export type RichStatus = {
 	sessionSavedAt?: number;
 };
 
+export type KeepAlive = { rotatedAt?: number; refreshedAt?: number; nextRotateAt?: number };
+
 export type Topic = { id: string; courseId: string; name: string; updatedAt: number };
 
 export type Submission = {

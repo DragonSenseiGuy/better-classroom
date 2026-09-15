@@ -1,6 +1,6 @@
 import type { PageServerLoad } from './$types';
 import { config } from '#lib/server/config.ts';
-import { getRichStatus, getWebSession } from '#lib/server/store.ts';
+import { getKeepAlive, getRichStatus, getWebSession } from '#lib/server/store.ts';
 
 export const load: PageServerLoad = () => {
 	const session = getWebSession();
@@ -15,7 +15,8 @@ export const load: PageServerLoad = () => {
 			configured: Boolean(session),
 			savedAt: session?.savedAt,
 			authuser: session?.authuser,
-			status: getRichStatus()
+			status: getRichStatus(),
+			keepAlive: getKeepAlive()
 		}
 	};
 };

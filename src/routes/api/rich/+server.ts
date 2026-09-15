@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { probeSession } from '#lib/server/rich.ts';
 import {
+	getKeepAlive,
 	getMeta,
 	getRichStatus,
 	getWebSession,
@@ -19,6 +20,7 @@ const summary = () => {
 		savedAt: session?.savedAt,
 		authuser: session?.authuser,
 		status: getRichStatus(),
+		keepAlive: getKeepAlive(),
 		probe: getMeta<unknown>('richProbe') ?? null
 	};
 };

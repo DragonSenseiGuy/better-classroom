@@ -14,12 +14,14 @@ import {
 import { warmAvatars } from './avatars';
 import {
 	findPost,
+	getKeepAlive,
 	getProfile,
 	getRichStatus,
 	getWebProfiles,
 	getWebSession,
 	listAll,
 	listByCourse,
+	saveKeepAlive,
 	saveRichStatus,
 	saveWebProfiles,
 	saveWebSession,
@@ -36,11 +38,22 @@ const PROFILE_BATCH = 25;
 
 let cached: { key: string; tokens: WebTokens; at: number } | null = null;
 
+// One jar per pasted cookie. The keep-alive timer and the sync walk run on
+// their own schedules; separate jars would each write their own copy of the
+// cookie back and could overwrite a freshly rotated device-session token
+// with the value it replaced.
+let shared: { savedAt: number; jar: CookieJar } | null = null;
+
 function jarFor(session: WebSession): CookieJar {
-	return {
-		cookie: session.cookie,
-		onChange: (cookie) => saveWebSession({ ...session, cookie })
-	};
+	if (shared?.savedAt !== session.savedAt)
+		shared = {
+			savedAt: session.savedAt,
+			jar: {
+				cookie: session.cookie,
+				onChange: (cookie) => saveWebSession({ ...session, cookie })
+			}
+		};
+	return shared.jar;
 }
 
 async function tokensFor(session: WebSession, jar: CookieJar, fresh = false) {
@@ -49,18 +62,32 @@ async function tokensFor(session: WebSession, jar: CookieJar, fresh = false) {
 		return cached.tokens;
 	await rotateIfDue(jar);
 	const tokens = await loadTokens(jar, session.authuser);
-	lastRefresh = Date.now();
+	saveKeepAlive({ ...getKeepAlive(), refreshedAt: Date.now() });
 	cached = { key, tokens, at: Date.now() };
 	return tokens;
 }
 
-let lastRefresh = 0;
-let nextRotateAt = 0;
+let rotating: Promise<void> | null = null;
 
-async function rotateIfDue(jar: CookieJar) {
-	if (Date.now() < nextRotateAt) return;
-	const { nextSeconds } = await rotateSession(jar);
-	nextRotateAt = Date.now() + nextSeconds * 1000;
+function rotateIfDue(jar: CookieJar): Promise<void> {
+	if (rotating) return rotating;
+	const state = getKeepAlive();
+	if (Date.now() < (state.nextRotateAt ?? 0)) return Promise.resolve();
+	rotating = rotateSession(jar)
+		.then(({ rotated, nextSeconds }) => {
+			saveKeepAlive({
+				...getKeepAlive(),
+				rotatedAt: rotated ? Date.now() : state.rotatedAt,
+				nextRotateAt: Date.now() + nextSeconds * 1000
+			});
+			console.log(
+				`classroom session: ${rotated ? 'rotated device cookies' : 'rotation issued no new cookies'}, next in ${nextSeconds}s`
+			);
+		})
+		.finally(() => {
+			rotating = null;
+		});
+	return rotating;
 }
 
 /**
@@ -77,9 +104,9 @@ export async function refreshSavedSession(): Promise<RichStatus | null> {
 	try {
 		const jar = jarFor(session);
 		await rotateIfDue(jar);
-		if (Date.now() - lastRefresh >= 10 * 60_000) {
+		if (Date.now() - (getKeepAlive().refreshedAt ?? 0) >= 10 * 60_000) {
 			await refreshSession(jar, session.authuser);
-			lastRefresh = Date.now();
+			saveKeepAlive({ ...getKeepAlive(), refreshedAt: Date.now() });
 		}
 		return previous;
 	} catch (err) {
