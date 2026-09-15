@@ -359,7 +359,15 @@ function submissionContext(courseId: string) {
 	};
 }
 
-export async function turnInSubmission(
+export type SubmissionVerb = 'turnIn' | 'reclaim';
+
+/**
+ * Submission state field 6: 2 = turned in, 5 = reclaimed by the student.
+ * Turn-in also sets field 33 and control field 13; reclaim sends control
+ * field 1 alone. Both captured from the web app on 2026-09-15.
+ */
+export async function writeSubmissionState(
+	verb: SubmissionVerb,
 	jar: CookieJar,
 	authuser: number,
 	tokens: WebTokens,
@@ -369,12 +377,20 @@ export async function turnInSubmission(
 	capture?: RawCapture[]
 ): Promise<WebSubmission> {
 	const key = `[${studentId},[${workId},[${courseId}]]]`;
-	const fields = new Array<string>(33).fill('null');
-	fields[0] = key;
-	fields[5] = '2';
-	fields[32] = '1';
-	const submission = `[${fields.join(',')}]`;
-	const args = `[[3],[[${key},${submission},${TURN_IN_CONTROL}]],${SUBMISSION_MASK}]`;
+	let submission: string;
+	let control: string;
+	if (verb === 'turnIn') {
+		const fields = new Array<string>(33).fill('null');
+		fields[0] = key;
+		fields[5] = '2';
+		fields[32] = '1';
+		submission = `[${fields.join(',')}]`;
+		control = TURN_IN_CONTROL;
+	} else {
+		submission = `[${key},null,null,null,null,5]`;
+		control = '[1]';
+	}
+	const args = `[[3],[[${key},${submission},${control}]],${SUBMISSION_MASK}]`;
 	const payload = await callRpc(
 		jar,
 		authuser,

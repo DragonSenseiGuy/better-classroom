@@ -22,33 +22,28 @@
 	import LoaderIcon from '@lucide/svelte/icons/loader-circle';
 	import { notify } from '#lib/toast.ts';
 
-	let handingIn = $state(false);
-	async function handIn() {
+	let acting = $state<'turnIn' | 'reclaim' | null>(null);
+	async function submit(action: 'turnIn' | 'reclaim') {
 		if (!w || !sub) return;
-		handingIn = true;
+		acting = action;
 		try {
 			const res = await fetch('/api/submissions', {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({
-					action: 'turnIn',
-					courseId: w.courseId,
-					workId: w.id,
-					submissionId: sub.id
-				})
+				body: JSON.stringify({ action, courseId: w.courseId, workId: w.id, submissionId: sub.id })
 			});
 			if (!res.ok) {
 				const text = await res.text();
 				throw new Error(text.replace(/^.*"message":"([^"]*)".*$/s, '$1'));
 			}
-			notify('emerald', 'Handed in', { description: w.title });
+			notify('emerald', action === 'turnIn' ? 'Handed in' : 'Unsubmitted', { description: w.title });
 		} catch (err) {
-			notify('rose', 'Could not hand in', {
+			notify('rose', action === 'turnIn' ? 'Could not hand in' : 'Could not unsubmit', {
 				description: err instanceof Error ? err.message : String(err),
 				duration: 10000
 			});
 		} finally {
-			handingIn = false;
+			acting = null;
 		}
 	}
 
@@ -182,9 +177,14 @@
 				{/if}
 				<div class="mt-4 flex flex-wrap gap-2">
 					{#if w.status === 'assigned' || w.status === 'missing'}
-						<Button size="sm" onclick={handIn} disabled={handingIn}>
-							{#if handingIn}<LoaderIcon data-icon="inline-start" class="animate-spin" />{/if}
+						<Button size="sm" onclick={() => submit('turnIn')} disabled={acting !== null}>
+							{#if acting === 'turnIn'}<LoaderIcon data-icon="inline-start" class="animate-spin" />{/if}
 							{sub.attachments.length ? 'Hand in' : 'Mark as done'}
+						</Button>
+					{:else if w.status === 'turnedIn'}
+						<Button variant="outline" size="sm" onclick={() => submit('reclaim')} disabled={acting !== null}>
+							{#if acting === 'reclaim'}<LoaderIcon data-icon="inline-start" class="animate-spin" />{/if}
+							Unsubmit
 						</Button>
 					{/if}
 					{#if sub.alternateLink}

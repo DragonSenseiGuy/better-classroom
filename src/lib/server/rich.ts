@@ -6,7 +6,7 @@ import {
 	loadTokens,
 	refreshSession,
 	rotateSession,
-	turnInSubmission,
+	writeSubmissionState,
 	type CookieJar,
 	type RawCapture,
 	type StreamItem,
@@ -306,15 +306,21 @@ async function submissionAction(
 	courseId: string,
 	workId: string
 ): Promise<{ turnedIn: boolean }> {
-	if (action !== 'turnIn')
-		throw new Error('Unsubmitting through the Classroom session is not supported yet.');
 	const session = getWebSession();
 	if (!session) throw new Error('No Classroom session saved.');
 	const studentId = myWebId();
 	if (!studentId) throw new Error('Your Classroom web id is not known yet; run a sync first.');
 	const jar = jarFor(session);
 	const tokens = await tokensFor(session, jar);
-	const result = await turnInSubmission(jar, session.authuser, tokens, studentId, workId, courseId);
+	const result = await writeSubmissionState(
+		action,
+		jar,
+		session.authuser,
+		tokens,
+		studentId,
+		workId,
+		courseId
+	);
 	return { turnedIn: result.turnedIn };
 }
 
