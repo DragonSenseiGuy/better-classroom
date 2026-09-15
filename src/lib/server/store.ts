@@ -224,6 +224,8 @@ export function applyCourses(
 				...c,
 				teachers: c.teachers?.length ? c.teachers : (prev?.teachers ?? []),
 				people: prev?.people ?? [],
+				students: prev?.students,
+				studentCount: prev?.studentCount,
 				archived: false,
 				lastSyncedAt: prev?.lastSyncedAt,
 				nickname: prev?.nickname,
