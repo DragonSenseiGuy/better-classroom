@@ -1,4 +1,5 @@
 import { config } from './config';
+import type { Provider } from './providers';
 
 export type RawAttachment = {
 	type: string;
@@ -247,3 +248,47 @@ async function fetchOnce<T>(url: URL): Promise<T> {
 	}
 	return body as T;
 }
+
+const sinceParam = (since: number): Record<string, string> =>
+	since ? { since: String(since) } : {};
+
+export const appsScriptProvider: Provider = {
+	status: () => {
+		const configured = Boolean(config.appsScriptUrl && config.appsScriptKey);
+		return {
+			id: 'apps-script',
+			label: 'Apps Script',
+			role: 'records',
+			state: configured ? 'ready' : 'off',
+			active: false,
+			detail: configured
+				? config.appsScriptUrl!.replace('https://script.google.com/macros/s/', '…/').replace(
+						/\/exec$/,
+						''
+					)
+				: 'Not set up.'
+		};
+	},
+	records: {
+		overview: (since) => fetchAppsScript<RawOverview>(sinceParam(since)),
+		courseContent: (courseId, since, wantSubmissions) =>
+			fetchAppsScript<RawCourseContent>({
+				course: courseId,
+				...sinceParam(since),
+				...(since && !wantSubmissions ? { work: '0' } : {})
+			}),
+		lookup: (courseId, users) =>
+			fetchAppsScript<RawLookup>({
+				course: courseId,
+				lookup: '1',
+				...(users.length ? { users: users.join(',') } : {})
+			}),
+		submissionAction: (action, courseId, workId, submissionId) =>
+			fetchAppsScript<RawSubmissionAction>({
+				action,
+				course: courseId,
+				work: workId,
+				submission: submissionId
+			})
+	}
+};

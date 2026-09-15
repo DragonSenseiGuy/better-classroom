@@ -29,6 +29,7 @@ import {
 	setPostExtras,
 	type WebSession
 } from './store';
+import type { Provider, Publish } from './providers';
 import type { Author, Change, CollectionName, RichStatus } from '#lib/shared/types.ts';
 
 const PAGE_SIZE = 50;
@@ -115,8 +116,6 @@ export async function refreshSavedSession(): Promise<RichStatus | null> {
 		return status;
 	}
 }
-
-export type Publish = (collection: CollectionName, changes: Change[]) => void;
 
 type Ctx = {
 	session: WebSession;
@@ -266,6 +265,31 @@ function failure(err: unknown, session: WebSession): RichStatus {
 		sessionSavedAt: session.savedAt
 	};
 }
+
+export const webProvider: Provider = {
+	status: () => {
+		const session = getWebSession();
+		const status = getRichStatus();
+		const keepAlive = getKeepAlive();
+		const keptAliveAt = Math.max(keepAlive.rotatedAt ?? 0, keepAlive.refreshedAt ?? 0);
+		const failed = session && status && !status.ok;
+		return {
+			id: 'web',
+			label: 'Classroom session',
+			role: 'enrichment',
+			state: !session ? 'off' : failed ? (status.expired ? 'expired' : 'error') : 'ready',
+			active: false,
+			detail: !session
+				? 'No cookie saved.'
+				: failed
+					? status.message
+					: keptAliveAt
+						? `Kept alive ${Math.round((Date.now() - keptAliveAt) / 60_000)} min ago.`
+						: 'Cookie saved.'
+		};
+	},
+	enrich: { enrich: syncRichText, keepAlive: refreshSavedSession }
+};
 
 export type ProbeAttempt = {
 	authuser: number;

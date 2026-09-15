@@ -24,10 +24,11 @@ export function configure(patch: Partial<Config>) {
 	Object.assign(config, patch);
 }
 
-let googleConnected: () => boolean = () => false;
-export function registerGoogleCheck(check: () => boolean) {
-	googleConnected = check;
+// The provider registry decides whether a record source is usable; it is
+// registered from hooks so this module stays free of provider imports.
+let sourceConnected: () => boolean = () => Boolean(config.appsScriptUrl && config.appsScriptKey);
+export function registerSourceCheck(check: () => boolean) {
+	sourceConnected = check;
 }
 
-export const isConfigured = () =>
-	googleConnected() || Boolean(config.appsScriptUrl && config.appsScriptKey);
+export const isConfigured = () => sourceConnected();

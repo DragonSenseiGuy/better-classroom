@@ -232,6 +232,30 @@
 	</Tabs.List>
 
 	<Tabs.Content value="connection" class="mt-6">
+		<section class="mb-6 rounded-xl bg-card ring-1 ring-foreground/10">
+			<div class="border-b px-5 py-4">
+				<h2 class="text-base font-semibold tracking-tight">Sources</h2>
+			</div>
+			<ul role="list" class="divide-y text-sm">
+				{#each data.providers as provider (provider.id)}
+					<li class="flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-3">
+						<span class="w-40 font-medium">{provider.label}</span>
+						{#if provider.state === 'off'}<Badge variant="outline">Off</Badge>
+						{:else if provider.state === 'expired'}<Badge variant="destructive">Expired</Badge>
+						{:else if provider.state === 'error'}<Badge variant="destructive">Error</Badge>
+						{:else if provider.active}<Badge
+								variant="outline"
+								class="text-emerald-700 dark:text-emerald-400"
+								>{provider.role === 'records' ? 'Primary' : 'On'}</Badge
+							>
+						{:else}<Badge variant="secondary">Standby</Badge>{/if}
+						<span class="min-w-0 flex-1 truncate text-muted-foreground" title={provider.detail}
+							>{provider.detail}</span
+						>
+					</li>
+				{/each}
+			</ul>
+		</section>
 		<section class="rounded-xl bg-card ring-1 ring-foreground/10">
 			<div class="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4">
 				<div class="flex items-center gap-3">

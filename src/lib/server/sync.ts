@@ -1,17 +1,9 @@
-import {
-	fetchAppsScript,
-	type RawCourseContent,
-	type RawLookup,
-	type RawOverview,
-	type RawSubmissionAction,
-	type RawTeacher
-} from './classroom';
+import type { RawCourseContent, RawTeacher } from './classroom';
 import { warmAvatars } from './avatars';
-import { fetchGoogle, isGoogleConnected } from './google';
 import { config, isConfigured } from './config';
 import { broadcast } from './events';
 import { rebuildSearchIndex } from './search';
-import { refreshSavedSession, syncRichText } from './rich';
+import { enrichers, recordSource } from './providers';
 import {
 	applyContent,
 	applyCourses,
@@ -36,9 +28,6 @@ let state: SyncStatus = getSyncStatus();
 let running: Promise<void> | null = null;
 
 export const syncStatus = () => state;
-
-const fetchSource = <T>(params: Record<string, string>): Promise<T> =>
-	isGoogleConnected() ? fetchGoogle<T>(params) : fetchAppsScript<T>(params);
 
 function setState(patch: Partial<SyncStatus>) {
 	state = {
@@ -88,7 +77,8 @@ async function doSync(options: { full?: boolean }) {
 	const startedAt = Date.now();
 	setState({ status: 'running', startedAt, error: undefined, pending: 0 });
 	try {
-		const overview = await fetchSource<RawOverview>(since ? { since: String(since) } : {});
+		const source = recordSource();
+		const overview = await source.overview(since);
 		setProfile({
 			id: overview.profile.id,
 			name: overview.profile.name ?? undefined,
@@ -122,12 +112,8 @@ async function doSync(options: { full?: boolean }) {
 		const worker = async () => {
 			for (let c = queue.shift(); c; c = queue.shift()) {
 				try {
-					const params: Record<string, string> = { course: c.id };
-					if (since) {
-						params.since = String(since);
-						if (listByCourse('courseWork', c.id).length === 0) params.work = '0';
-					}
-					const content = await fetchSource<RawCourseContent>(params);
+					const wantSubmissions = !since || listByCourse('courseWork', c.id).length > 0;
+					const content = await source.courseContent(c.id, since, wantSubmissions);
 					errors.push(...scriptErrors(c.name, content.errors));
 					const unknown = applyCourseContent(c.id, content);
 					if (unknown.users.length || unknown.topics)
@@ -169,9 +155,12 @@ let richRunning: Promise<void> | null = null;
 
 export function runRichSync(options: { full?: boolean } = {}): Promise<void> {
 	if (richRunning) return richRunning;
-	richRunning = syncRichText(options, publish)
-		.catch((err) => console.error('rich text sync failed', err))
-		.then(() => undefined)
+	richRunning = (async () => {
+		for (const provider of enrichers())
+			await provider.enrich
+				.enrich(options, publish)
+				.catch((err) => console.error('enrichment failed', err));
+	})()
 		.finally(() => {
 			richRunning = null;
 		});
@@ -297,9 +286,7 @@ function unknownReferences(courseId: string, content: ReturnType<typeof shapeCon
 }
 
 async function resolveUnknown(courseId: string, name: string, users: string[]) {
-	const params: Record<string, string> = { course: courseId, lookup: '1' };
-	if (users.length) params.users = users.join(',');
-	const found = await fetchSource<RawLookup>(params);
+	const found = await recordSource().lookup(courseId, users);
 	const change = mergeCoursePeople(courseId, {
 		teachers: found.teachers?.map(person),
 		people: found.people?.map(person)
@@ -342,12 +329,7 @@ export async function submissionAction(
 	workId: string,
 	submissionId: string
 ) {
-	const result = await fetchSource<RawSubmissionAction>({
-		action,
-		course: courseId,
-		work: workId,
-		submission: submissionId
-	});
+	const result = await recordSource().submissionAction(action, courseId, workId, submissionId);
 	const [row] = shapeContent(courseId, { submissions: [result.submission] }).submissions;
 	publish('submissions', applyContent('submissions', courseId, [row], true));
 	return row;
@@ -376,6 +358,9 @@ export function startScheduler() {
 	else scheduleNext();
 	setInterval(() => {
 		if (richRunning) return;
-		void refreshSavedSession().catch((err) => console.error('session refresh failed', err));
+		for (const provider of enrichers())
+			void provider.enrich
+				.keepAlive()
+				.catch((err) => console.error('session keep-alive failed', err));
 	}, KEEP_ALIVE_MINUTES * 60_000);
 }

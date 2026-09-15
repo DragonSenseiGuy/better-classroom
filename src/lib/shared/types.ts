@@ -92,6 +92,18 @@ export type RichStatus = {
 
 export type KeepAlive = { rotatedAt?: number; refreshedAt?: number; nextRotateAt?: number };
 
+export type ProviderId = 'google' | 'apps-script' | 'web';
+export type ProviderRole = 'records' | 'enrichment';
+export type ProviderState = 'off' | 'ready' | 'expired' | 'error';
+export type ProviderStatus = {
+	id: ProviderId;
+	label: string;
+	role: ProviderRole;
+	state: ProviderState;
+	active: boolean;
+	detail?: string;
+};
+
 export type Topic = { id: string; courseId: string; name: string; updatedAt: number };
 
 export type Submission = {

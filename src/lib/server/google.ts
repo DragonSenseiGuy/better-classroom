@@ -1,5 +1,6 @@
 import { config } from './config';
 import { getMeta, setMeta } from './store';
+import type { Provider } from './providers';
 import type {
 	RawAttachment,
 	RawCourseContent,
@@ -473,17 +474,24 @@ export async function submissionAction(
 	return { submission: slimSubmission(await api<GSubmission>(base)) };
 }
 
-export async function fetchGoogle<T>(params: Record<string, string>): Promise<T> {
-	const since = params.since ? Number(params.since) : 0;
-	if (params.action === 'turnIn' || params.action === 'reclaim')
-		return (await submissionAction(
-			params.action,
-			params.course,
-			params.work,
-			params.submission
-		)) as T;
-	if (params.course && params.lookup)
-		return (await lookup(params.course, (params.users ?? '').split(',').filter(Boolean))) as T;
-	if (params.course) return (await courseContent(params.course, since, params.work !== '0')) as T;
-	return (await overview(since)) as T;
-}
+export const googleProvider: Provider = {
+	status: () => {
+		const connected = isGoogleConnected();
+		const writable = getGoogleTokens()?.scope.split(' ').includes(WRITE_SCOPE) ?? false;
+		return {
+			id: 'google',
+			label: 'Google sign-in',
+			role: 'records',
+			state: connected ? 'ready' : 'off',
+			active: false,
+			detail: !hasGoogleClient()
+				? 'No OAuth client configured.'
+				: !connected
+					? 'Not signed in.'
+					: writable
+						? 'Signed in with write access.'
+						: 'Signed in, read-only.'
+		};
+	},
+	records: { overview, courseContent, lookup, submissionAction }
+};

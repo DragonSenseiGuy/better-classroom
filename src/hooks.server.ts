@@ -7,9 +7,12 @@ import {
 	GOOGLE_CLIENT_ID,
 	GOOGLE_CLIENT_SECRET
 } from '$app/env/private';
-import { configure, registerGoogleCheck } from '#lib/server/config.ts';
+import { configure, registerSourceCheck } from '#lib/server/config.ts';
 import { getConnection } from '#lib/server/store.ts';
-import { isGoogleConnected } from '#lib/server/google.ts';
+import { googleProvider } from '#lib/server/google.ts';
+import { appsScriptProvider } from '#lib/server/classroom.ts';
+import { webProvider } from '#lib/server/rich.ts';
+import { hasRecordSource, registerProviders } from '#lib/server/providers.ts';
 import { startScheduler } from '#lib/server/sync.ts';
 
 export const init: ServerInit = async () => {
@@ -21,7 +24,8 @@ export const init: ServerInit = async () => {
 		syncIntervalMinutes: SYNC_INTERVAL_MINUTES,
 		databasePath: DATABASE_PATH
 	});
-	registerGoogleCheck(isGoogleConnected);
+	registerProviders(googleProvider, appsScriptProvider, webProvider);
+	registerSourceCheck(hasRecordSource);
 	const saved = getConnection();
 	if (saved) configure({ appsScriptUrl: saved.url, appsScriptKey: saved.key });
 	startScheduler();
