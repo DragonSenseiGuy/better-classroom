@@ -249,7 +249,8 @@ async function callRpc(
 	rpc: string,
 	args: string,
 	path: string,
-	capture?: RawCapture[]
+	capture?: RawCapture[],
+	headers: Record<string, string> = {}
 ): Promise<Json> {
 	const url = new URL(`${ORIGIN}/u/${authuser}/_/ClassroomUi/data/batchexecute`);
 	url.searchParams.set('rpcids', rpc);
@@ -272,7 +273,8 @@ async function callRpc(
 			'content-type': 'application/x-www-form-urlencoded;charset=UTF-8',
 			origin: ORIGIN,
 			referer: ORIGIN + path,
-			'x-same-domain': '1'
+			'x-same-domain': '1',
+			...headers
 		},
 		body,
 		redirect: 'manual',
@@ -324,6 +326,85 @@ export async function fetchProfiles(
 		`/u/${authuser}/h`
 	);
 	return parseProfilesPayload(payload);
+}
+
+// ---- submissions (RPC CVt8yf, HomeroomDataService.WriteSubmission) --------
+//
+// Wire format from a real hand-in capture, then confirmed live (2026-09-15).
+// A submission is keyed by [studentWebId, [workId, [courseId]]]; the student
+// id is the web-namespace id the profiles RPC returns, matched by email.
+// The write echoes the resulting record, so no separate query is needed
+// (Google rejects QuerySubmission replays from this session with code 3).
+// The request must carry the course in x-goog-ext-53200201-jspb.
+
+const SUBMISSION_RPC = 'CVt8yf';
+
+const SUBMISSION_MASK =
+	'[null,1,null,1,1,null,1,1,1,null,null,null,1,null,[1],null,null,null,1,1,1,null,null,null,[[1,1]],[[1,1]],[1,[[1,1,[],[null,1,1]],1,1,1]],null,null,null,null,1]';
+
+// Control proto: field 1 = turn in, field 2 = save attachments. Field 13 is
+// set alongside turn-in in every capture.
+const TURN_IN_CONTROL = '[1,null,null,null,null,null,null,null,null,null,null,null,1]';
+
+export type WebSubmission = {
+	turnedIn: boolean;
+	turnedInAt?: number;
+	attachments: { title?: string; driveId?: string; url?: string }[];
+};
+
+function submissionContext(courseId: string) {
+	return {
+		'x-goog-ext-174067345-jspb': '[[1]]',
+		'x-goog-ext-53200201-jspb': `[{"444624357":[${courseId}]}]`
+	};
+}
+
+export async function turnInSubmission(
+	jar: CookieJar,
+	authuser: number,
+	tokens: WebTokens,
+	studentId: string,
+	workId: string,
+	courseId: string,
+	capture?: RawCapture[]
+): Promise<WebSubmission> {
+	const key = `[${studentId},[${workId},[${courseId}]]]`;
+	const fields = new Array<string>(33).fill('null');
+	fields[0] = key;
+	fields[5] = '2';
+	fields[32] = '1';
+	const submission = `[${fields.join(',')}]`;
+	const args = `[[3],[[${key},${submission},${TURN_IN_CONTROL}]],${SUBMISSION_MASK}]`;
+	const payload = await callRpc(
+		jar,
+		authuser,
+		tokens,
+		SUBMISSION_RPC,
+		args,
+		`/u/${authuser}/c/${encodeCourseId(courseId)}/a/${encodeCourseId(workId)}/details`,
+		capture,
+		submissionContext(courseId)
+	);
+	return parseSubmission(payload);
+}
+
+/** Response is `["hrw.sub", [record]]`; record[5] === 2 with record[21] a
+ *  timestamp means turned in; record[4] lists attachments. */
+function parseSubmission(payload: Json): WebSubmission {
+	const record = Array.isArray(payload) && Array.isArray(payload[1]) ? payload[1][0] : null;
+	if (!Array.isArray(record)) throw new Error('WriteSubmission returned no record');
+	const attachments: WebSubmission['attachments'] = [];
+	if (Array.isArray(record[4]))
+		for (const a of record[4]) {
+			if (!Array.isArray(a)) continue;
+			attachments.push({
+				title: typeof a[0] === 'string' ? a[0] : undefined,
+				driveId: typeof a[2] === 'string' ? a[2] : undefined,
+				url: typeof a[6] === 'string' ? a[6] : undefined
+			});
+		}
+	const turnedInAt = typeof record[21] === 'number' ? record[21] : undefined;
+	return { turnedIn: record[5] === 2 && turnedInAt !== undefined, turnedInAt, attachments };
 }
 
 export function extractPayload(text: string, rpc: string): Json {

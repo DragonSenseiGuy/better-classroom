@@ -6,6 +6,7 @@ import {
 	loadTokens,
 	refreshSession,
 	rotateSession,
+	turnInSubmission,
 	type CookieJar,
 	type RawCapture,
 	type StreamItem,
@@ -288,8 +289,34 @@ export const webProvider: Provider = {
 						: 'Cookie saved.'
 		};
 	},
-	enrich: { enrich: syncRichText, keepAlive: refreshSavedSession }
+	enrich: { enrich: syncRichText, keepAlive: refreshSavedSession, submissionAction }
 };
+
+/** The signed-in student's web-side id, matched by email among synced profiles. */
+function myWebId(): string | null {
+	const email = getProfile()?.email?.toLowerCase();
+	if (!email) return null;
+	for (const [id, p] of Object.entries(getWebProfiles()))
+		if (p.email?.toLowerCase() === email) return id;
+	return null;
+}
+
+async function submissionAction(
+	action: 'turnIn' | 'reclaim',
+	courseId: string,
+	workId: string
+): Promise<{ turnedIn: boolean }> {
+	if (action !== 'turnIn')
+		throw new Error('Unsubmitting through the Classroom session is not supported yet.');
+	const session = getWebSession();
+	if (!session) throw new Error('No Classroom session saved.');
+	const studentId = myWebId();
+	if (!studentId) throw new Error('Your Classroom web id is not known yet; run a sync first.');
+	const jar = jarFor(session);
+	const tokens = await tokensFor(session, jar);
+	const result = await turnInSubmission(jar, session.authuser, tokens, studentId, workId, courseId);
+	return { turnedIn: result.turnedIn };
+}
 
 export type ProbeAttempt = {
 	authuser: number;

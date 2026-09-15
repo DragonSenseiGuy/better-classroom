@@ -329,6 +329,17 @@ export async function submissionAction(
 	workId: string,
 	submissionId: string
 ) {
+	// The Classroom session is the only path Google allows for hand-in on
+	// teacher-created work, so it goes first; REST remains for the rest.
+	const web = enrichers().find((p) => p.enrich.submissionAction);
+	if (web && action === 'turnIn') {
+		const { turnedIn } = await web.enrich.submissionAction!(action, courseId, workId);
+		const existing = listByCourse('submissions', courseId).find((s) => s.id === submissionId);
+		if (!existing) throw new Error('Submission record not found; sync first.');
+		const row = { ...existing, state: turnedIn ? 'TURNED_IN' : existing.state, updatedAt: Date.now() };
+		publish('submissions', applyContent('submissions', courseId, [row], true));
+		return row;
+	}
 	const result = await recordSource().submissionAction(action, courseId, workId, submissionId);
 	const [row] = shapeContent(courseId, { submissions: [result.submission] }).submissions;
 	publish('submissions', applyContent('submissions', courseId, [row], true));

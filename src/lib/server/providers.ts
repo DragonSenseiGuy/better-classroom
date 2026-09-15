@@ -32,6 +32,16 @@ export type RecordSource = {
 export type Enricher = {
 	enrich(options: { full?: boolean }, publish: Publish): Promise<RichStatus | null>;
 	keepAlive(): Promise<unknown>;
+	/**
+	 * Hand-in through the web session. The REST API refuses turnIn on work
+	 * created by any other OAuth project, so this is the only path that works
+	 * for teacher-created assignments.
+	 */
+	submissionAction?(
+		action: 'turnIn' | 'reclaim',
+		courseId: string,
+		workId: string
+	): Promise<{ turnedIn: boolean }>;
 };
 
 export type Provider = {

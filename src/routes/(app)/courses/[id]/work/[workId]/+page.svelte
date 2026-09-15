@@ -19,6 +19,38 @@
 		statusLabel
 	} from '#lib/format.ts';
 	import ExternalLinkIcon from '@lucide/svelte/icons/external-link';
+	import LoaderIcon from '@lucide/svelte/icons/loader-circle';
+	import { notify } from '#lib/toast.ts';
+
+	let handingIn = $state(false);
+	async function handIn() {
+		if (!w || !sub) return;
+		handingIn = true;
+		try {
+			const res = await fetch('/api/submissions', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({
+					action: 'turnIn',
+					courseId: w.courseId,
+					workId: w.id,
+					submissionId: sub.id
+				})
+			});
+			if (!res.ok) {
+				const text = await res.text();
+				throw new Error(text.replace(/^.*"message":"([^"]*)".*$/s, '$1'));
+			}
+			notify('emerald', 'Handed in', { description: w.title });
+		} catch (err) {
+			notify('rose', 'Could not hand in', {
+				description: err instanceof Error ? err.message : String(err),
+				duration: 10000
+			});
+		} finally {
+			handingIn = false;
+		}
+	}
 
 	const row = useLiveQuery({
 		query: (q) =>
@@ -148,18 +180,19 @@
 				{:else if w.status === 'assigned' || w.status === 'missing'}
 					<p class="mt-3 text-sm text-muted-foreground">Nothing attached yet.</p>
 				{/if}
-				{#if sub.alternateLink}
-					<Button
-						variant="outline"
-						size="sm"
-						class="mt-4"
-						href={sub.alternateLink}
-						target="_blank"
-						rel="noreferrer"
-					>
-						Manage submission <ExternalLinkIcon data-icon="inline-end" />
-					</Button>
-				{/if}
+				<div class="mt-4 flex flex-wrap gap-2">
+					{#if w.status === 'assigned' || w.status === 'missing'}
+						<Button size="sm" onclick={handIn} disabled={handingIn}>
+							{#if handingIn}<LoaderIcon data-icon="inline-start" class="animate-spin" />{/if}
+							{sub.attachments.length ? 'Hand in' : 'Mark as done'}
+						</Button>
+					{/if}
+					{#if sub.alternateLink}
+						<Button variant="outline" size="sm" href={sub.alternateLink} target="_blank" rel="noreferrer">
+							Manage submission <ExternalLinkIcon data-icon="inline-end" />
+						</Button>
+					{/if}
+				</div>
 			{:else}
 				<p class="mt-1 text-sm text-muted-foreground">No submission record yet.</p>
 			{/if}
