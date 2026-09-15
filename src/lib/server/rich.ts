@@ -4,7 +4,7 @@ import {
 	fetchProfiles,
 	fetchStreamPage,
 	loadTokens,
-	rotateSession,
+	refreshSession,
 	type CookieJar,
 	type RawCapture,
 	type StreamItem,
@@ -46,30 +46,32 @@ async function tokensFor(session: WebSession, jar: CookieJar, fresh = false) {
 	const key = `${session.authuser}:${session.savedAt}`;
 	if (!fresh && cached && cached.key === key && Date.now() - cached.at < TOKEN_TTL)
 		return cached.tokens;
-	await keepAlive(jar);
 	const tokens = await loadTokens(jar, session.authuser);
+	lastRefresh = Date.now();
 	cached = { key, tokens, at: Date.now() };
 	return tokens;
 }
 
-const ROTATE_EVERY = 5 * 60_000;
-let lastRotate = 0;
+const REFRESH_EVERY = 10 * 60_000;
+let lastRefresh = 0;
 
-async function keepAlive(jar: CookieJar) {
-	if (Date.now() - lastRotate < ROTATE_EVERY) return;
-	await rotateSession(jar);
-	lastRotate = Date.now();
+async function keepAlive(jar: CookieJar, authuser: number) {
+	if (Date.now() - lastRefresh < REFRESH_EVERY) return;
+	await refreshSession(jar, authuser);
+	lastRefresh = Date.now();
 }
 
-export async function rotateSavedSession(): Promise<RichStatus | null> {
+/** Periodic keep-alive; the scheduler calls this between syncs. */
+export async function refreshSavedSession(): Promise<RichStatus | null> {
 	const session = getWebSession();
 	if (!session) return null;
 	const previous = getRichStatus();
 	if (previous && !previous.ok && previous.expired && previous.sessionSavedAt === session.savedAt)
 		return previous;
+	if (Date.now() - lastRefresh < REFRESH_EVERY) return previous;
 	try {
-		await rotateSession(jarFor(session));
-		lastRotate = Date.now();
+		await refreshSession(jarFor(session), session.authuser);
+		lastRefresh = Date.now();
 		return previous;
 	} catch (err) {
 		const status = failure(err, session);

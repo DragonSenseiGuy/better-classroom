@@ -75,22 +75,47 @@ function absorb(jar: CookieJar, res: Response) {
 	jar.onChange?.(next);
 }
 
-export async function rotateSession(jar: CookieJar): Promise<boolean> {
-	const res = await fetch('https://accounts.google.com/RotateCookies', {
-		method: 'POST',
-		headers: { cookie: jar.cookie, 'user-agent': UA, 'content-type': 'application/json' },
-		body: '[000,"-0000000000000000000"]',
-		redirect: 'manual',
-		signal: AbortSignal.timeout(30_000)
-	});
+// Headers that a signed-in Chrome 129 on macOS sends. Google's session
+// heuristics compare these against the browser that minted the cookie; a
+// bare user-agent with no client hints looks like a scripted client.
+// Note: the TLS ClientHello (JA3/JA4) cannot be shaped from Bun's fetch, so
+// this only aligns the HTTP-level fingerprint.
+const CLIENT_HINTS = {
+	'user-agent': UA,
+	'sec-ch-ua': '"Google Chrome";v="129", "Not=A?Brand";v="8", "Chromium";v="129"',
+	'sec-ch-ua-mobile': '?0',
+	'sec-ch-ua-platform': '"macOS"',
+	'accept-language': 'en-GB,en;q=0.9'
+};
+
+const DOCUMENT_HEADERS = {
+	...CLIENT_HINTS,
+	accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+	'sec-fetch-site': 'none',
+	'sec-fetch-mode': 'navigate',
+	'sec-fetch-dest': 'document',
+	'sec-fetch-user': '?1',
+	'upgrade-insecure-requests': '1'
+};
+
+const XHR_HEADERS = {
+	...CLIENT_HINTS,
+	accept: '*/*',
+	'sec-fetch-site': 'same-origin',
+	'sec-fetch-mode': 'cors',
+	'sec-fetch-dest': 'empty'
+};
+
+/**
+ * Keep-alive that stays inside Classroom: a plain page fetch returns fresh
+ * SIDCC / __Secure-*PSIDCC cookies which the jar absorbs. It deliberately
+ * does not touch accounts.google.com/RotateCookies — that endpoint expects a
+ * device-bound proof only a real Chrome profile can produce, and a malformed
+ * call there is a reliable way to get the whole session invalidated.
+ */
+export async function refreshSession(jar: CookieJar, authuser: number): Promise<boolean> {
 	const before = jar.cookie;
-	absorb(jar, res);
-	if (res.status >= 300 && res.status < 400) {
-		const to = res.headers.get('location') ?? '';
-		if (/accounts\.google\.com\/(ServiceLogin|v3\/signin)/.test(to))
-			throw new SessionError('Google asked for a sign-in.');
-	}
-	if (!res.ok && res.status !== 302) throw new Error(`RotateCookies responded ${res.status}`);
+	await loadTokens(jar, authuser);
 	return jar.cookie !== before;
 }
 
@@ -154,7 +179,7 @@ export const encodeCourseId = (courseId: string) => Buffer.from(courseId).toStri
 
 export async function loadTokens(jar: CookieJar, authuser: number): Promise<WebTokens> {
 	const res = await fetch(`${ORIGIN}/u/${authuser}/h`, {
-		headers: { cookie: jar.cookie, 'user-agent': UA, accept: 'text/html' },
+		headers: { ...DOCUMENT_HEADERS, cookie: jar.cookie },
 		redirect: 'manual',
 		signal: AbortSignal.timeout(30_000)
 	});
@@ -202,8 +227,8 @@ async function callRpc(
 	const res = await fetch(url, {
 		method: 'POST',
 		headers: {
+			...XHR_HEADERS,
 			cookie: jar.cookie,
-			'user-agent': UA,
 			'content-type': 'application/x-www-form-urlencoded;charset=UTF-8',
 			origin: ORIGIN,
 			referer: ORIGIN + path,
