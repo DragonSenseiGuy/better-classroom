@@ -1,5 +1,5 @@
-import { runSearch } from '../src/lib/shared/fuzzy';
-import { normalize } from '../src/lib/shared/normalize';
+import { runSearch } from '../src/lib/server/fuzzy';
+import { normalize } from '../src/lib/server/normalize';
 
 const words =
 	'colour behaviour organise centre analyse programme catalogue defence grey travelling maths photograph algebra geometry pendulum titration sketchbook revision essay quiz presentation mock exam sources thesis ethics discussion chapter homework reading response week practice questions past paper lab report worksheet'.split(

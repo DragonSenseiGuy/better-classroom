@@ -1,5 +1,5 @@
-import { runSearch, type Haystacks } from '#lib/shared/fuzzy.ts';
-import { normalize, snippet } from '#lib/shared/normalize.ts';
+import { runSearch, type Haystacks } from './fuzzy';
+import { normalize, snippet } from './normalize';
 import type { SearchDoc } from '#lib/shared/types.ts';
 import { listAll } from './store';
 import { perUser } from './tenant';

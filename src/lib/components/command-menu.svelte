@@ -1,7 +1,7 @@
 <script lang="ts">
 	import * as Command from '#lib/components/ui/command/index.js';
 	import { goto, preloadData } from '$app/navigation';
-	import type { SearchHit } from '#lib/shared/fuzzy.ts';
+	import type { SearchHit } from '#lib/shared/types.ts';
 	import type { SearchDoc } from '#lib/shared/types.ts';
 	import { courseColor, displayName, formatDue } from '#lib/format.ts';
 	import HouseIcon from '@lucide/svelte/icons/house';

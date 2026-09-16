@@ -180,6 +180,8 @@ export type ServerEvent =
 	| { type: 'changes'; version: number; collection: CollectionName; changes: Change[] }
 	| { type: 'sync'; sync: SyncStatus };
 
+export type SearchHit<T = SearchDoc> = { doc: T; score: number };
+
 export type SearchDoc = {
 	kind: 'course' | 'work' | 'material' | 'announcement';
 	id: string;

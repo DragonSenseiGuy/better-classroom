@@ -1,7 +1,6 @@
 import uFuzzy from '@leeoniya/ufuzzy';
 import { normalize } from './normalize';
-
-export type SearchHit<T> = { doc: T; score: number };
+import type { SearchHit } from '#lib/shared/types.ts';
 
 export type Haystacks = { titles: string[]; bodies: string[] };
 

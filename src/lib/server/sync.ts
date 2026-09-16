@@ -24,7 +24,7 @@ import {
 } from './store';
 import { listUserIds } from './db';
 import { perUser, runAs } from './tenant';
-import { dueAt, ms } from '#lib/shared/time.ts';
+import { dueAt, ms } from './time';
 import type { Attachment, Change, CollectionName, SyncStatus, Teacher } from '#lib/shared/types.ts';
 
 type UserSync = {

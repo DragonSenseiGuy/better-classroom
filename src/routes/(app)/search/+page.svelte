@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { untrack } from 'svelte';
-	import type { SearchHit } from '#lib/shared/fuzzy.ts';
+	import type { SearchHit } from '#lib/shared/types.ts';
 	import type { SearchDoc } from '#lib/shared/types.ts';
 	import { Input } from '#lib/components/ui/input/index.js';
 	import { Badge } from '#lib/components/ui/badge/index.js';
