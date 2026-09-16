@@ -9,6 +9,7 @@ FROM oven/bun:1.4-slim
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
+ENV KEEP_ALIVE_TIMEOUT=120
 ENV DATABASE_PATH=/app/data/classroom.sqlite
 COPY --from=build /app/package.json ./
 COPY --from=build /app/node_modules ./node_modules
