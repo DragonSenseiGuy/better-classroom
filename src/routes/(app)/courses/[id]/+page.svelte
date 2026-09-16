@@ -244,7 +244,7 @@
 					>
 				</h2>
 				<ul role="list" class="mt-2 divide-y divide-border/60">
-					{#each course.students as s (s.email ?? s.name)}
+					{#each course.students as s, i (s.email ?? `${s.name}#${i}`)}
 						<li class="flex items-center gap-3 py-2.5">
 							<UserAvatar src={s.photoUrl} name={s.name} class="size-8" fallbackClass="text-xs" />
 							<div class="min-w-0">
