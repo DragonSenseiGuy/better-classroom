@@ -2,28 +2,40 @@ import type { WorkStatus } from '#lib/shared/status.ts';
 
 const DAY = 86_400_000;
 
-const dateFmt = new Intl.DateTimeFormat('en-GB', {
-	weekday: 'short',
-	day: 'numeric',
-	month: 'short'
-});
-const dateFmtUtc = new Intl.DateTimeFormat('en-GB', {
-	weekday: 'short',
-	day: 'numeric',
-	month: 'short',
-	timeZone: 'UTC'
-});
-const longDateFmt = new Intl.DateTimeFormat('en-GB', {
-	weekday: 'long',
-	day: 'numeric',
-	month: 'long'
-});
-const longDateFmtUtc = new Intl.DateTimeFormat('en-GB', {
-	weekday: 'long',
-	day: 'numeric',
-	month: 'long',
-	timeZone: 'UTC'
-});
+const SHORT: Intl.DateTimeFormatOptions = { weekday: 'short', day: 'numeric', month: 'short' };
+const LONG: Intl.DateTimeFormatOptions = { weekday: 'long', day: 'numeric', month: 'long' };
+
+const formatters = new Map<string, Intl.DateTimeFormat>();
+function fmt(options: Intl.DateTimeFormatOptions) {
+	const key = JSON.stringify(options);
+	let f = formatters.get(key);
+	if (!f) {
+		f = new Intl.DateTimeFormat('en-GB', options);
+		formatters.set(key, f);
+	}
+	return f;
+}
+
+/** True when `t` falls outside the current year, so the year is worth showing. */
+export function outsideThisYear(t: number, utc = false, now = Date.now()) {
+	const d = new Date(t);
+	return (utc ? d.getUTCFullYear() : d.getFullYear()) !== new Date(now).getFullYear();
+}
+
+/** Formats a date, adding the year only when it is not the current one. */
+export function formatDate(
+	t: number,
+	options: Intl.DateTimeFormatOptions = SHORT,
+	utc = false,
+	now = Date.now()
+) {
+	return fmt({
+		...options,
+		...(utc ? { timeZone: 'UTC' } : {}),
+		...(outsideThisYear(t, utc, now) ? { year: 'numeric' } : {})
+	}).format(t);
+}
+
 const timeFmt = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' });
 const fullFmt = new Intl.DateTimeFormat('en-GB', {
 	day: 'numeric',
@@ -56,7 +68,7 @@ export function dayLabel(dayStart: number, now = Date.now()) {
 	if (diff === -1) return 'Yesterday';
 	if (diff > 1 && diff < 7)
 		return new Intl.DateTimeFormat('en-GB', { weekday: 'long' }).format(dayStart);
-	return longDateFmt.format(dayStart);
+	return formatDate(dayStart, LONG, false, now);
 }
 
 export function formatDue(
@@ -67,12 +79,12 @@ export function formatDue(
 	if (dueAt === undefined) return 'No due date';
 	const dayStart = dueDayStart(dueAt, hasDueTime);
 	const label = dayLabel(dayStart, now);
-	const date = label.length > 9 ? (hasDueTime ? dateFmt : dateFmtUtc).format(dueAt) : label;
+	const date = label.length > 9 ? formatDate(dueAt, SHORT, !hasDueTime, now) : label;
 	return hasDueTime ? `${date}, ${timeFmt.format(dueAt)}` : date;
 }
 
 export function formatDateLong(t: number, utc = false) {
-	return (utc ? longDateFmtUtc : longDateFmt).format(t);
+	return formatDate(t, LONG, utc);
 }
 
 export function formatDateTime(t: number) {
@@ -85,7 +97,7 @@ export function formatRelative(t: number, now = Date.now()) {
 	if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
 	if (diff < DAY) return `${Math.floor(diff / 3_600_000)}h ago`;
 	if (diff < 7 * DAY) return `${Math.floor(diff / DAY)}d ago`;
-	return dateFmt.format(t);
+	return formatDate(t, SHORT, false, now);
 }
 
 export function isDueSoon(dueAt: number | undefined, now = Date.now()) {

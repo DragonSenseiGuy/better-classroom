@@ -36,6 +36,7 @@
 		courseColor,
 		displayName,
 		dueDayStart,
+		formatDate,
 		formatDue,
 		pluralize,
 		startOfDay,
@@ -255,7 +256,7 @@
 	const days = $derived(Array.from({ length: 7 }, (_, i) => weekStart + i * DAY));
 	const dayFmt = new Intl.DateTimeFormat('en-GB', { weekday: 'short' });
 	const numFmt = new Intl.DateTimeFormat('en-GB', { day: 'numeric' });
-	const rangeFmt = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short' });
+	const rangeFmt = { format: (t: number) => formatDate(t, { day: 'numeric', month: 'short' }) };
 	const week = $derived.by(() => {
 		const byDay = new Map<number, WorkSummary[]>();
 		const overdue: WorkSummary[] = [];
