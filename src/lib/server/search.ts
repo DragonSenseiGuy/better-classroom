@@ -106,5 +106,3 @@ export function search(q: string, limit = 20) {
 	const { docs, hay } = indexes();
 	return runSearch(docs, hay, q, limit);
 }
-
-export const indexSize = () => indexes().docs.length;

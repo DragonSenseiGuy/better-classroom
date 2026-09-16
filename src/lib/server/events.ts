@@ -28,5 +28,3 @@ export function broadcast(event: ServerEvent) {
 		}
 	}
 }
-
-export const listenerCount = (userId: string) => listeners.get(userId)?.size ?? 0;

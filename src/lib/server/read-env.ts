@@ -12,7 +12,6 @@ export type Env = {
 		: never;
 };
 
-/** Validates process.env against the schema in src/env.ts, for code that runs outside Vite. */
 export function readEnv(source: Record<string, string | undefined> = process.env): Env {
 	const out: Record<string, unknown> = {};
 	for (const [name, { schema }] of Object.entries(variables)) {

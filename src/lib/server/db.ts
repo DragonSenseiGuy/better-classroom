@@ -43,7 +43,7 @@ export function authDb() {
 	return (shared.__classroomAuthDb ??= open(config.databasePath));
 }
 
-export const userDbPath = (userId: string) =>
+const userDbPath = (userId: string) =>
 	join(dirname(config.databasePath), 'users', `${userId}.sqlite`);
 
 const userDb = (shared.__classroomUserDbs ??= perUser((userId) => {

@@ -9,7 +9,7 @@ export const runAs = <T>(userId: string, fn: () => T): T => storage.run({ userId
 
 export const currentUserId = () => storage.getStore()?.userId ?? null;
 
-export function requireUserId(): string {
+function requireUserId(): string {
 	const id = currentUserId();
 	if (!id) throw new Error('No signed-in user in this context.');
 	return id;
