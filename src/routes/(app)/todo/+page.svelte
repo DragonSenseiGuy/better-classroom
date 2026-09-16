@@ -25,6 +25,7 @@
 	import BulkProgressDialog from '#lib/components/bulk-progress-dialog.svelte';
 	import { runBatch, type Progress, type SubmissionAction } from '#lib/submissions.ts';
 	import { notify } from '#lib/toast.ts';
+	import { celebrate } from '#lib/celebrate.ts';
 	import { createHotkey } from '@tanstack/svelte-hotkeys';
 	import { SvelteSet } from 'svelte/reactivity';
 	import CheckCheckIcon from '@lucide/svelte/icons/check-check';
@@ -214,6 +215,7 @@
 			const failed = result.filter((p) => p.state === 'failed');
 			const done = result.length - failed.length;
 			clearSelection();
+			if (action === 'turnIn' && done > 0) celebrate();
 			if (!modal) {
 				if (failed.length)
 					notify('rose', `${failed.length} of ${result.length} failed`, {

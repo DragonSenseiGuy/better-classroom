@@ -21,6 +21,7 @@
 	import ExternalLinkIcon from '@lucide/svelte/icons/external-link';
 	import LoaderIcon from '@lucide/svelte/icons/loader-circle';
 	import { notify } from '#lib/toast.ts';
+	import { celebrate } from '#lib/celebrate.ts';
 	import type { Comment, SubmissionFile } from '#lib/shared/types.ts';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import PaperclipIcon from '@lucide/svelte/icons/paperclip';
@@ -174,6 +175,7 @@
 				throw new Error(text.replace(/^.*"message":"([^"]*)".*$/s, '$1'));
 			}
 			notify('emerald', action === 'turnIn' ? 'Handed in' : 'Unsubmitted', { description: w.title });
+			if (action === 'turnIn') celebrate();
 		} catch (err) {
 			notify('rose', action === 'turnIn' ? 'Could not hand in' : 'Could not unsubmit', {
 				description: err instanceof Error ? err.message : String(err),
