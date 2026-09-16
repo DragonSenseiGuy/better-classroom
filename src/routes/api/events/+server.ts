@@ -3,7 +3,8 @@ import { subscribe } from '#lib/server/events.ts';
 import { syncStatus } from '#lib/server/sync.ts';
 import type { ServerEvent } from '#lib/shared/types.ts';
 
-export const GET: RequestHandler = ({ request }) => {
+export const GET: RequestHandler = ({ request, locals }) => {
+	const userId = locals.user!.id;
 	const encoder = new TextEncoder();
 	let unsubscribe = () => {};
 	let ping: ReturnType<typeof setInterval>;
@@ -12,7 +13,7 @@ export const GET: RequestHandler = ({ request }) => {
 			const send = (event: ServerEvent) =>
 				controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
 			send({ type: 'hello', version: syncStatus().version, sync: syncStatus() });
-			unsubscribe = subscribe(send);
+			unsubscribe = subscribe(userId, send);
 			ping = setInterval(() => controller.enqueue(encoder.encode(': ping\n\n')), 25_000);
 			request.signal.addEventListener('abort', () => {
 				unsubscribe();

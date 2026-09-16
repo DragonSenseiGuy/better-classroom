@@ -37,6 +37,7 @@ import {
 	type WebSession
 } from './store';
 import type { Provider, Publish } from './providers';
+import { perUser } from './tenant';
 import type {
 	Author,
 	Change,
@@ -51,44 +52,47 @@ const MAX_PAGES = 60;
 const TOKEN_TTL = 20 * 60_000;
 const PROFILE_BATCH = 25;
 
-let cached: { key: string; tokens: WebTokens; at: number } | null = null;
-
-// One jar per pasted cookie. The keep-alive timer and the sync walk run on
-// their own schedules; separate jars would each write their own copy of the
-// cookie back and could overwrite a freshly rotated device-session token
-// with the value it replaced.
-let shared: { savedAt: number; jar: CookieJar } | null = null;
+// One jar per pasted cookie, per user. The keep-alive timer and the sync
+// walk run on their own schedules; separate jars would each write their own
+// copy of the cookie back and could overwrite a freshly rotated
+// device-session token with the value it replaced.
+const local = perUser(() => ({
+	cached: null as { key: string; tokens: WebTokens; at: number } | null,
+	shared: null as { savedAt: number; jar: CookieJar } | null,
+	rotating: null as Promise<void> | null
+}));
 
 function jarFor(session: WebSession): CookieJar {
-	if (shared?.savedAt !== session.savedAt)
-		shared = {
+	const l = local();
+	if (l.shared?.savedAt !== session.savedAt)
+		l.shared = {
 			savedAt: session.savedAt,
 			jar: {
 				cookie: session.cookie,
 				onChange: (cookie) => saveWebSession({ ...session, cookie })
 			}
 		};
-	return shared.jar;
+	return l.shared.jar;
 }
 
 async function tokensFor(session: WebSession, jar: CookieJar, fresh = false) {
+	const l = local();
 	const key = `${session.authuser}:${session.savedAt}`;
-	if (!fresh && cached && cached.key === key && Date.now() - cached.at < TOKEN_TTL)
-		return cached.tokens;
+	if (!fresh && l.cached && l.cached.key === key && Date.now() - l.cached.at < TOKEN_TTL)
+		return l.cached.tokens;
 	await rotateIfDue(jar);
 	const tokens = await loadTokens(jar, session.authuser);
 	saveKeepAlive({ ...getKeepAlive(), refreshedAt: Date.now() });
-	cached = { key, tokens, at: Date.now() };
+	l.cached = { key, tokens, at: Date.now() };
 	return tokens;
 }
 
-let rotating: Promise<void> | null = null;
-
 function rotateIfDue(jar: CookieJar): Promise<void> {
-	if (rotating) return rotating;
+	const l = local();
+	if (l.rotating) return l.rotating;
 	const state = getKeepAlive();
 	if (Date.now() < (state.nextRotateAt ?? 0)) return Promise.resolve();
-	rotating = rotateSession(jar)
+	l.rotating = rotateSession(jar)
 		.then(({ rotated, nextSeconds }) => {
 			saveKeepAlive({
 				...getKeepAlive(),
@@ -100,9 +104,9 @@ function rotateIfDue(jar: CookieJar): Promise<void> {
 			);
 		})
 		.finally(() => {
-			rotating = null;
+			l.rotating = null;
 		});
-	return rotating;
+	return l.rotating;
 }
 
 /**
@@ -343,7 +347,8 @@ async function removeWebFile(
 	const { session, studentId, jar, tokens } = await webContext();
 	const a = session.authuser;
 	const current = await querySubmissionAttachments(jar, a, tokens, workId, courseId);
-	if (!current.some((f) => f.driveId === driveId)) throw new Error('That file is no longer attached.');
+	if (!current.some((f) => f.driveId === driveId))
+		throw new Error('That file is no longer attached.');
 	const remaining = current.filter((f) => f.driveId !== driveId);
 	await writeAttachments(jar, a, tokens, studentId, workId, courseId, remaining);
 	const after = await querySubmissionAttachments(jar, a, tokens, workId, courseId);

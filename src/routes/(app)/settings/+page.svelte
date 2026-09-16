@@ -3,6 +3,8 @@
 	import { browser } from '$app/env';
 	import { goto } from '$app/navigation';
 	import { live } from '#lib/db/live.svelte.ts';
+	import { authClient } from '#lib/auth-client.ts';
+	import LogOutIcon from '@lucide/svelte/icons/log-out';
 	import { useLiveQuery } from '@tanstack/svelte-db';
 	import { courses } from '#lib/db/collections.ts';
 	import { setCoursePrefs } from '#lib/course-prefs.ts';
@@ -215,6 +217,13 @@
 		Math.max(rich.keepAlive?.rotatedAt ?? 0, rich.keepAlive?.refreshedAt ?? 0) || undefined
 	);
 
+	let signingOut = $state(false);
+	async function signOut() {
+		signingOut = true;
+		await authClient.signOut();
+		window.location.assign('/login');
+	}
+
 	const shortUrl = $derived(
 		data.connection.url.replace('https://script.google.com/macros/s/', '…/').replace(/\/exec$/, '')
 	);
@@ -232,6 +241,22 @@
 	</Tabs.List>
 
 	<Tabs.Content value="connection" class="mt-6">
+		<section
+			class="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-card px-5 py-4 ring-1 ring-foreground/10"
+		>
+			<div class="min-w-0">
+				<h2 class="text-base font-semibold tracking-tight">Account</h2>
+				<p class="truncate text-sm text-muted-foreground">
+					Signed in as {page.data.user?.name || page.data.user?.email}
+					{#if page.data.user?.name}<span class="text-muted-foreground/70"
+							>· {page.data.user.email}</span
+						>{/if}
+				</p>
+			</div>
+			<Button variant="outline" size="sm" onclick={signOut} disabled={signingOut}>
+				<LogOutIcon data-icon="inline-start" />Sign out
+			</Button>
+		</section>
 		<section class="mb-6 rounded-xl bg-card ring-1 ring-foreground/10">
 			<div class="border-b px-5 py-4">
 				<h2 class="text-base font-semibold tracking-tight">Sources</h2>
@@ -397,9 +422,9 @@
 					<ol class="max-w-prose list-decimal space-y-1 pl-5 text-muted-foreground">
 						<li>
 							Open classroom.google.com in a browser profile you use for nothing else, signed in
-							with your school account. Google rotates the session cookie from any open Google
-							tab, and two rotators on one session get the whole account signed out, so this
-							profile must stay closed once the cookie is copied.
+							with your school account. Google rotates the session cookie from any open Google tab,
+							and two rotators on one session get the whole account signed out, so this profile must
+							stay closed once the cookie is copied.
 						</li>
 						<li>
 							Open DevTools → Network, reload, click the first <span class="font-mono"

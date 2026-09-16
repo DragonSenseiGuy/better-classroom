@@ -1,7 +1,5 @@
 export type Config = {
 	databasePath: string;
-	appsScriptUrl?: string;
-	appsScriptKey?: string;
 	googleClientId?: string;
 	googleClientSecret?: string;
 	syncIntervalMinutes: number;
@@ -11,8 +9,6 @@ export type Config = {
 
 export const config: Config = {
 	databasePath: process.env.DATABASE_PATH || 'data/classroom.sqlite',
-	appsScriptUrl: process.env.APPS_SCRIPT_URL || undefined,
-	appsScriptKey: process.env.APPS_SCRIPT_KEY || undefined,
 	googleClientId: process.env.GOOGLE_CLIENT_ID || undefined,
 	googleClientSecret: process.env.GOOGLE_CLIENT_SECRET || undefined,
 	syncIntervalMinutes: Number(process.env.SYNC_INTERVAL_MINUTES) || 5,
@@ -24,9 +20,9 @@ export function configure(patch: Partial<Config>) {
 	Object.assign(config, patch);
 }
 
-// The provider registry decides whether a record source is usable; it is
-// registered from hooks so this module stays free of provider imports.
-let sourceConnected: () => boolean = () => Boolean(config.appsScriptUrl && config.appsScriptKey);
+// The provider registry decides whether the current user has a usable record
+// source; it is registered from hooks so this module stays free of provider imports.
+let sourceConnected: () => boolean = () => false;
 export function registerSourceCheck(check: () => boolean) {
 	sourceConnected = check;
 }

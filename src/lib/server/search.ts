@@ -2,10 +2,16 @@ import { runSearch, type Haystacks } from '#lib/shared/fuzzy.ts';
 import { normalize, snippet } from '#lib/shared/normalize.ts';
 import type { SearchDoc } from '#lib/shared/types.ts';
 import { listAll } from './store';
+import { perUser } from './tenant';
 import { courseLabel } from '#lib/format.ts';
 
-let docs: SearchDoc[] = [];
-let hay: Haystacks = { titles: [], bodies: [] };
+type Index = { docs: SearchDoc[]; hay: Haystacks; built: boolean };
+
+const indexes = perUser<Index>(() => ({
+	docs: [],
+	hay: { titles: [], bodies: [] },
+	built: false
+}));
 
 export function rebuildSearchIndex() {
 	const courses = new Map(
@@ -89,12 +95,16 @@ export function rebuildSearchIndex() {
 			`${a.text} ${a.materials.map((x) => x.title ?? '').join(' ')}`
 		);
 	}
-	docs = nextDocs;
-	hay = { titles, bodies };
+	const index = indexes();
+	index.docs = nextDocs;
+	index.hay = { titles, bodies };
+	index.built = true;
 }
 
 export function search(q: string, limit = 20) {
+	if (!indexes().built) rebuildSearchIndex();
+	const { docs, hay } = indexes();
 	return runSearch(docs, hay, q, limit);
 }
 
-export const indexSize = () => docs.length;
+export const indexSize = () => indexes().docs.length;

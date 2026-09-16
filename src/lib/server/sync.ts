@@ -21,52 +21,72 @@ import {
 	type ContentTable,
 	type CoursePrefs
 } from './store';
+import { listUserIds } from './db';
+import { perUser, runAs } from './tenant';
 import { dueAt, ms } from '#lib/shared/time.ts';
 import type { Attachment, Change, CollectionName, SyncStatus, Teacher } from '#lib/shared/types.ts';
 
-let state: SyncStatus = getSyncStatus();
-let running: Promise<void> | null = null;
+type UserSync = {
+	state: SyncStatus;
+	running: Promise<void> | null;
+	queuedFull: boolean;
+	backoffMinutes: number;
+	nextRunAt: number;
+	richRunning: Promise<void> | null;
+};
 
-export const syncStatus = () => state;
+const users = perUser<UserSync>(() => ({
+	state: getSyncStatus(),
+	running: null,
+	queuedFull: false,
+	backoffMinutes: 0,
+	nextRunAt: 0,
+	richRunning: null
+}));
+
+export const syncStatus = () => users().state;
 
 function setState(patch: Partial<SyncStatus>) {
-	state = {
-		...state,
+	const u = users();
+	u.state = {
+		...u.state,
 		...patch,
 		configured: isConfigured(),
 		intervalMinutes: config.syncIntervalMinutes
 	};
-	saveSyncStatus(state);
-	broadcast({ type: 'sync', sync: state });
+	saveSyncStatus(u.state);
+	broadcast({ type: 'sync', sync: u.state });
 }
 
 function publish(collection: CollectionName, changes: Change[]) {
 	if (changes.length === 0) return;
-	state = { ...state, version: state.version + 1 };
-	broadcast({ type: 'changes', version: state.version, collection, changes });
+	const u = users();
+	u.state = { ...u.state, version: u.state.version + 1 };
+	broadcast({ type: 'changes', version: u.state.version, collection, changes });
 }
 
-let queuedFull = false;
-
 export function runSync(options: { full?: boolean } = {}): Promise<void> {
-	if (running) {
-		if (options.full) queuedFull = true;
-		return running;
+	const u = users();
+	if (u.running) {
+		if (options.full) u.queuedFull = true;
+		return u.running;
 	}
-	running = doSync(options).finally(() => {
-		running = null;
-		if (queuedFull) {
-			queuedFull = false;
+	u.running = doSync(options).finally(() => {
+		u.running = null;
+		u.nextRunAt =
+			Date.now() + Math.max(u.backoffMinutes, Math.max(1, config.syncIntervalMinutes)) * 60_000;
+		if (u.queuedFull) {
+			u.queuedFull = false;
 			void runSync({ full: true });
 		}
 	});
-	return running;
+	return u.running;
 }
 
 const QUOTA = /quota|rate ?limit|429/i;
-let backoffMinutes = 0;
 
 async function doSync(options: { full?: boolean }) {
+	const u = users();
 	if (!isConfigured()) {
 		setState({ status: 'idle', pending: 0 });
 		return;
@@ -121,7 +141,7 @@ async function doSync(options: { full?: boolean }) {
 				} catch (err) {
 					errors.push(`${c.name}: ${err instanceof Error ? err.message : String(err)}`);
 				}
-				setState({ pending: Math.max(0, state.pending - 1) });
+				setState({ pending: Math.max(0, u.state.pending - 1) });
 			}
 		};
 		await Promise.all(
@@ -132,8 +152,8 @@ async function doSync(options: { full?: boolean }) {
 			setMeta('lastSyncStartedAt', startedAt);
 			if (full) setMeta('lastFullSyncAt', startedAt);
 		}
-		backoffMinutes = errors.some((e) => QUOTA.test(e))
-			? Math.min(30, (backoffMinutes || config.syncIntervalMinutes) * 2)
+		u.backoffMinutes = errors.some((e) => QUOTA.test(e))
+			? Math.min(30, (u.backoffMinutes || config.syncIntervalMinutes) * 2)
 			: 0;
 		setState({
 			status: errors.length ? 'error' : 'idle',
@@ -144,27 +164,25 @@ async function doSync(options: { full?: boolean }) {
 		void runRichSync({ full });
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
-		backoffMinutes = QUOTA.test(message)
-			? Math.min(30, (backoffMinutes || config.syncIntervalMinutes) * 2)
+		u.backoffMinutes = QUOTA.test(message)
+			? Math.min(30, (u.backoffMinutes || config.syncIntervalMinutes) * 2)
 			: 0;
 		setState({ status: 'error', error: message, finishedAt: Date.now(), pending: 0 });
 	}
 }
 
-let richRunning: Promise<void> | null = null;
-
 export function runRichSync(options: { full?: boolean } = {}): Promise<void> {
-	if (richRunning) return richRunning;
-	richRunning = (async () => {
+	const u = users();
+	if (u.richRunning) return u.richRunning;
+	u.richRunning = (async () => {
 		for (const provider of enrichers())
 			await provider.enrich
 				.enrich(options, publish)
 				.catch((err) => console.error('enrichment failed', err));
-	})()
-		.finally(() => {
-			richRunning = null;
-		});
-	return richRunning;
+	})().finally(() => {
+		u.richRunning = null;
+	});
+	return u.richRunning;
 }
 
 const clean = (a: Attachment) => ({
@@ -354,28 +372,39 @@ export function dismiss(id: string, dismissed: boolean) {
 	publish('dismissals', [setDismissed(id, dismissed)]);
 }
 
-let timer: ReturnType<typeof setTimeout> | undefined;
+let timer: ReturnType<typeof setInterval> | undefined;
 
-function scheduleNext() {
-	const minutes = Math.max(backoffMinutes, Math.max(1, config.syncIntervalMinutes));
-	timer = setTimeout(async () => {
-		await runSync();
-		scheduleNext();
-	}, minutes * 60_000);
-}
-
+const TICK_MS = 30_000;
 const KEEP_ALIVE_MINUTES = 5;
 
+function syncDueUsers() {
+	for (const id of listUserIds())
+		runAs(id, () => {
+			const u = users();
+			if (u.running || Date.now() < u.nextRunAt) return;
+			if (!isConfigured()) {
+				u.nextRunAt = Date.now() + Math.max(1, config.syncIntervalMinutes) * 60_000;
+				return;
+			}
+			void runSync();
+		});
+}
+
+function keepSessionsAlive() {
+	for (const id of listUserIds())
+		runAs(id, () => {
+			if (users().richRunning) return;
+			for (const provider of enrichers())
+				void provider.enrich
+					.keepAlive()
+					.catch((err) => console.error('session keep-alive failed', err));
+		});
+}
+
+/** One clock for every account: each user syncs on their own interval and backoff. */
 export function startScheduler() {
 	if (timer) return;
-	rebuildSearchIndex();
-	if (isConfigured()) void runSync().then(scheduleNext);
-	else scheduleNext();
-	setInterval(() => {
-		if (richRunning) return;
-		for (const provider of enrichers())
-			void provider.enrich
-				.keepAlive()
-				.catch((err) => console.error('session keep-alive failed', err));
-	}, KEEP_ALIVE_MINUTES * 60_000);
+	syncDueUsers();
+	timer = setInterval(syncDueUsers, TICK_MS);
+	setInterval(keepSessionsAlive, KEEP_ALIVE_MINUTES * 60_000);
 }

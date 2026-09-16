@@ -1,4 +1,4 @@
-import { config } from './config';
+import { getConnection } from './store';
 import type { Provider } from './providers';
 
 export type RawAttachment = {
@@ -208,14 +208,10 @@ export async function testConnection(url: string, key: string): Promise<Connecti
 }
 
 export async function fetchAppsScript<T>(params: Record<string, string>): Promise<T> {
-	const base = config.appsScriptUrl;
-	const key = config.appsScriptKey;
-	if (!base || !key)
-		throw new Error(
-			'APPS_SCRIPT_URL and APPS_SCRIPT_KEY are not configured. Finish setup at /setup.'
-		);
-	const url = new URL(base);
-	url.searchParams.set('key', key);
+	const connection = getConnection();
+	if (!connection) throw new Error('Apps Script is not connected. Finish setup at /setup.');
+	const url = new URL(connection.url);
+	url.searchParams.set('key', connection.key);
 	for (const [k, val] of Object.entries(params)) url.searchParams.set(k, val);
 	let lastError: Error = new Error('Apps Script request failed');
 	for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
@@ -254,18 +250,15 @@ const sinceParam = (since: number): Record<string, string> =>
 
 export const appsScriptProvider: Provider = {
 	status: () => {
-		const configured = Boolean(config.appsScriptUrl && config.appsScriptKey);
+		const connection = getConnection();
 		return {
 			id: 'apps-script',
 			label: 'Apps Script',
 			role: 'records',
-			state: configured ? 'ready' : 'off',
+			state: connection ? 'ready' : 'off',
 			active: false,
-			detail: configured
-				? config.appsScriptUrl!.replace('https://script.google.com/macros/s/', '…/').replace(
-						/\/exec$/,
-						''
-					)
+			detail: connection
+				? connection.url.replace('https://script.google.com/macros/s/', '…/').replace(/\/exec$/, '')
 				: 'Not set up.'
 		};
 	},

@@ -96,7 +96,7 @@
 			{courses}
 			{inboxCount}
 			{todoCount}
-			profile={data.snapshot.profile}
+			profile={data.snapshot.profile ?? { name: data.user?.name, email: data.user?.email }}
 			onSearch={() => (paletteOpen = true)}
 		/>
 		<Sidebar.Inset class="isolate">
