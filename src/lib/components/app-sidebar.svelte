@@ -7,7 +7,7 @@
 	import { displayName, type CourseRef as Course } from '#lib/course.ts';
 	import CourseDot from '#lib/components/course-dot.svelte';
 	import CourseMenu from '#lib/components/course-menu.svelte';
-	import RenameCourseDialog from '#lib/components/rename-course-dialog.svelte';
+	import { editCourse } from '#lib/course-editor.svelte.ts';
 	import HouseIcon from '@lucide/svelte/icons/house';
 	import ListChecksIcon from '@lucide/svelte/icons/list-checks';
 	import InboxIcon from '@lucide/svelte/icons/inbox';
@@ -30,8 +30,6 @@
 		inboxCount?: number;
 		todoCount?: number;
 	} = $props();
-
-	let renaming = $state<Course | null>(null);
 
 	const sidebar = Sidebar.useSidebar();
 	afterNavigate(() => sidebar.setOpenMobile(false));
@@ -86,7 +84,7 @@
 				<Sidebar.Menu>
 					{#each courses as course (course.id)}
 						<Sidebar.MenuItem>
-							<CourseMenu {course} onRename={(c) => (renaming = c)}>
+							<CourseMenu {course} onRename={editCourse}>
 								<Sidebar.MenuButton
 									isActive={page.url.pathname.startsWith(`/courses/${course.id}`)}
 									tooltipContent={displayName(course)}
@@ -141,5 +139,3 @@
 		</Sidebar.Menu>
 	</Sidebar.Footer>
 </Sidebar.Root>
-
-<RenameCourseDialog bind:course={renaming} />

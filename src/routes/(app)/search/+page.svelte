@@ -8,6 +8,7 @@
 	import * as Empty from '#lib/components/ui/empty/index.js';
 	import { formatDue, formatRelative } from '#lib/format.ts';
 	import CourseDot from '#lib/components/course-dot.svelte';
+	import PageHeader from '#lib/components/page-header.svelte';
 	import SearchIcon from '@lucide/svelte/icons/search';
 
 	let { data } = $props();
@@ -24,7 +25,7 @@
 	}
 </script>
 
-<h1 class="text-2xl font-semibold tracking-tight">Search</h1>
+<PageHeader title="Search" />
 <form class="mt-4 max-w-xl" onsubmit={(e) => e.preventDefault()} role="search">
 	<div class="relative">
 		<SearchIcon

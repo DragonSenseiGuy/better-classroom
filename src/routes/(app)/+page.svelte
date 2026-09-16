@@ -4,6 +4,7 @@
 	import { summarize, byDue, isOpen, type WorkSummary } from '#lib/work.ts';
 	import { groupBy } from '#lib/group.ts';
 	import WorkItem from '#lib/components/work-item.svelte';
+	import PageHeader from '#lib/components/page-header.svelte';
 	import Announcement from '#lib/components/announcement.svelte';
 	import * as Empty from '#lib/components/ui/empty/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
@@ -45,17 +46,14 @@
 
 	const courseCount = $derived(new Set(work.map((w) => w.courseId)).size);
 	const firstName = $derived(data.snapshot.profile?.name?.split(' ')[0]);
+	const subtitle = $derived(
+		open.length
+			? `You have ${pluralize(open.length, 'open assignment')} across ${pluralize(courseCount, 'course')}.`
+			: 'Nothing outstanding right now.'
+	);
 </script>
 
-<h1 class="text-2xl font-semibold tracking-tight text-balance">
-	{greeting()}{firstName ? `, ${firstName}` : ''}
-</h1>
-<p class="mt-1 text-sm text-pretty text-muted-foreground">
-	{#if open.length}You have {pluralize(open.length, 'open assignment')} across {pluralize(
-			courseCount,
-			'course'
-		)}.{:else}Nothing outstanding right now.{/if}
-</p>
+<PageHeader title={`${greeting()}${firstName ? `, ${firstName}` : ''}`} description={subtitle} />
 
 <div class="mt-10 grid gap-12 *:min-w-0 lg:grid-cols-[3fr_2fr]">
 	<section>

@@ -1,8 +1,9 @@
 <script lang="ts">
 	import * as ContextMenu from '#lib/components/ui/context-menu/index.js';
 	import { setCoursePrefs } from '#lib/api.ts';
+	import { setCourseHidden } from '#lib/course-actions.ts';
 	import { notify } from '#lib/toast.ts';
-	import { displayName, type CourseRef as Course } from '#lib/course.ts';
+	import type { CourseRef as Course } from '#lib/course.ts';
 	import type { Snippet } from 'svelte';
 	import PencilIcon from '@lucide/svelte/icons/pencil';
 	import EyeOffIcon from '@lucide/svelte/icons/eye-off';
@@ -15,13 +16,8 @@
 		children
 	}: { course: Course; onRename: (course: Course) => void; children: Snippet } = $props();
 
-	async function hide() {
-		await setCoursePrefs(course.id, { hidden: true });
-		notify('amber', `Hid ${displayName(course)}`, {
-			description: 'Find it again under Settings → Hidden courses.',
-			action: { label: 'Undo', onClick: () => setCoursePrefs(course.id, { hidden: false }) }
-		});
-	}
+	const hide = () =>
+		setCourseHidden(course, true, 'Find it again under Settings → Hidden courses.');
 
 	async function resetName() {
 		const nickname = course.nickname;

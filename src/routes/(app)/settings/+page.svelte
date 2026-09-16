@@ -7,7 +7,6 @@
 	import LogOutIcon from '@lucide/svelte/icons/log-out';
 	import { useLiveQuery } from '@tanstack/svelte-db';
 	import { courses } from '#lib/db/collections.ts';
-	import { setCoursePrefs } from '#lib/api.ts';
 	import {
 		notifications,
 		notificationsSupported,
@@ -29,7 +28,8 @@
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Kbd, KbdGroup } from '#lib/components/ui/kbd/index.js';
 	import PageHeader from '#lib/components/page-header.svelte';
-	import RenameCourseDialog from '#lib/components/rename-course-dialog.svelte';
+	import { editCourse } from '#lib/course-editor.svelte.ts';
+	import { setCourseHidden } from '#lib/course-actions.ts';
 	import EyeIcon from '@lucide/svelte/icons/eye';
 	import EyeOffIcon from '@lucide/svelte/icons/eye-off';
 	import PencilIcon from '@lucide/svelte/icons/pencil';
@@ -72,21 +72,6 @@
 	const sorted = $derived(courseQuery.data.slice().sort(byDisplayName));
 	const visible = $derived(sorted.filter((c) => !c.hidden));
 	const hidden = $derived(sorted.filter((c) => c.hidden));
-	let editing = $state<(typeof sorted)[number] | null>(null);
-
-	async function setHidden(
-		course: { id: string; name: string; nickname?: string },
-		value: boolean
-	) {
-		await setCoursePrefs(course.id, { hidden: value });
-		notify(
-			value ? 'amber' : 'emerald',
-			value ? `Hid ${displayName(course)}` : `${displayName(course)} is back`,
-			{
-				action: { label: 'Undo', onClick: () => setCoursePrefs(course.id, { hidden: !value }) }
-			}
-		);
-	}
 
 	let syncing = $state(false);
 	async function syncNow() {
@@ -539,13 +524,13 @@
 						variant="ghost"
 						size="icon-sm"
 						aria-label="Edit"
-						onclick={() => (editing = course)}><PencilIcon /></Button
+						onclick={() => editCourse(course)}><PencilIcon /></Button
 					>
 					<Button
 						variant="ghost"
 						size="icon-sm"
 						aria-label="Hide"
-						onclick={() => setHidden(course, true)}><EyeOffIcon /></Button
+						onclick={() => setCourseHidden(course, true)}><EyeOffIcon /></Button
 					>
 				</li>
 			{:else}
@@ -559,7 +544,7 @@
 					<li class="flex items-center gap-3 py-2 opacity-70">
 						<CourseDot id={course.id} size="lg" class="shrink-0" />
 						<span class="min-w-0 flex-1 truncate text-sm">{displayName(course)}</span>
-						<Button variant="outline" size="sm" onclick={() => setHidden(course, false)}
+						<Button variant="outline" size="sm" onclick={() => setCourseHidden(course, false)}
 							><EyeIcon data-icon="inline-start" />Show</Button
 						>
 					</li>
@@ -620,5 +605,3 @@
 		</dl>
 	</Tabs.Content>
 </Tabs.Root>
-
-<RenameCourseDialog bind:course={editing} />

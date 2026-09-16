@@ -11,6 +11,8 @@
 	import { Kbd, KbdGroup } from '#lib/components/ui/kbd/index.js';
 	import AppSidebar from '#lib/components/app-sidebar.svelte';
 	import CommandMenu from '#lib/components/command-menu.svelte';
+	import RenameCourseDialog from '#lib/components/rename-course-dialog.svelte';
+	import { courseEditor } from '#lib/course-editor.svelte.ts';
 	import { createDb } from '#lib/db/client.ts';
 	import { courses as coursesCollection } from '#lib/db/collections.ts';
 	import {
@@ -149,4 +151,5 @@
 	</Sidebar.Provider>
 
 	<CommandMenu bind:open={paletteOpen} {courses} />
+	<RenameCourseDialog bind:course={courseEditor.course} />
 </DbProvider>
