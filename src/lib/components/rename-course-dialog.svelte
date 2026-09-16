@@ -3,7 +3,7 @@
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Input } from '#lib/components/ui/input/index.js';
 	import { Label } from '#lib/components/ui/label/index.js';
-	import { setCoursePrefs } from '#lib/course-prefs.ts';
+	import { setCoursePrefs } from '#lib/api.ts';
 	import { courseColorName } from '#lib/course-colors.svelte.ts';
 	import { COLOR_CLASS, COLOR_NAMES, hashedColor, type ColorName } from '#lib/shared/colors.ts';
 	import CheckIcon from '@lucide/svelte/icons/check';

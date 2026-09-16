@@ -2,8 +2,8 @@
 	import { useLiveQuery } from '@tanstack/svelte-db';
 	import { WindowVirtualizer, type WindowVirtualizerHandle } from 'virtua/svelte';
 	import { createHotkey } from '@tanstack/svelte-hotkeys';
-	import { allDismissals, inboxAnnouncements, inboxKey, inboxMaterials } from '#lib/inbox.ts';
-	import { setDismissed } from '#lib/dismiss.ts';
+	import { allDismissals, inboxAnnouncements, inboxKey, inboxMaterials } from '#lib/db/queries.ts';
+	import { setDismissed } from '#lib/api.ts';
 	import { celebrate } from '#lib/celebrate.ts';
 	import { notify } from '#lib/toast.ts';
 	import PageHeader from '#lib/components/page-header.svelte';

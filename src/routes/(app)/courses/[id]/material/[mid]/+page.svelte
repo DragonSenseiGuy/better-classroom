@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { useLiveQuery, eq } from '@tanstack/svelte-db';
-	import { courses, materials, topics } from '#lib/db/collections.ts';
+	import { courses, materials } from '#lib/db/collections.ts';
+	import { topicById } from '#lib/db/queries.ts';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import Attachments from '#lib/components/attachments.svelte';
 	import RichText from '#lib/components/rich-text.svelte';
@@ -16,13 +17,7 @@
 				.innerJoin({ c: courses }, ({ m, c }) => eq(m.courseId, c.id))
 				.findOne()
 	});
-	const topicQuery = useLiveQuery({
-		query: (q) =>
-			q
-				.from({ t: topics })
-				.where(({ t }) => eq(t.id, row.data?.m.topicId ?? ''))
-				.findOne()
-	});
+	const topicQuery = useLiveQuery({ query: (q) => topicById(q, row.data?.m.topicId) });
 	const m = $derived(row.data?.m);
 	const courseName = $derived(row.data ? displayName(row.data.c) : '');
 </script>

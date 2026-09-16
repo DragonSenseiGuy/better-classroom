@@ -2,14 +2,8 @@
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { useLiveQuery, eq } from '@tanstack/svelte-db';
-	import {
-		announcements,
-		courses,
-		courseWork,
-		materials,
-		submissions,
-		topics
-	} from '#lib/db/collections.ts';
+	import { announcements, courses, materials, topics } from '#lib/db/collections.ts';
+	import { workInCourse } from '#lib/db/queries.ts';
 	import { isOpen, summarize } from '#lib/work.ts';
 	import * as Tabs from '#lib/components/ui/tabs/index.js';
 	import UserAvatar from '#lib/components/user-avatar.svelte';
@@ -38,13 +32,7 @@
 				.where(({ c }) => eq(c.id, page.params.id))
 				.findOne()
 	});
-	const workQuery = useLiveQuery({
-		query: (q) =>
-			q
-				.from({ w: courseWork })
-				.where(({ w }) => eq(w.courseId, page.params.id))
-				.leftJoin({ s: submissions }, ({ w, s }) => eq(w.id, s.courseWorkId))
-	});
+	const workQuery = useLiveQuery({ query: (q) => workInCourse(q, page.params.id) });
 	const materialQuery = useLiveQuery({
 		query: (q) => q.from({ m: materials }).where(({ m }) => eq(m.courseId, page.params.id))
 	});

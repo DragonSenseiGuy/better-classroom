@@ -7,7 +7,7 @@
 	import LogOutIcon from '@lucide/svelte/icons/log-out';
 	import { useLiveQuery } from '@tanstack/svelte-db';
 	import { courses } from '#lib/db/collections.ts';
-	import { setCoursePrefs } from '#lib/course-prefs.ts';
+	import { setCoursePrefs } from '#lib/api.ts';
 	import {
 		notifications,
 		notificationsSupported,

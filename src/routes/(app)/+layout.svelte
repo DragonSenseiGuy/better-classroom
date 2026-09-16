@@ -3,7 +3,7 @@
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { createHotkey, createHotkeySequence } from '@tanstack/svelte-hotkeys';
-	import { DbProvider, useLiveQuery, eq } from '@tanstack/svelte-db';
+	import { DbProvider, useLiveQuery } from '@tanstack/svelte-db';
 	import { displayName } from '#lib/format.ts';
 	import * as Sidebar from '#lib/components/ui/sidebar/index.js';
 	import * as Breadcrumb from '#lib/components/ui/breadcrumb/index.js';
@@ -13,8 +13,13 @@
 	import CommandMenu from '#lib/components/command-menu.svelte';
 	import { createDb } from '#lib/db/client.ts';
 	import { courses as coursesCollection } from '#lib/db/collections.ts';
-	import { workWithContext } from '#lib/db/queries.ts';
-	import { allDismissals, inboxAnnouncements, inboxKey, inboxMaterials } from '#lib/inbox.ts';
+	import {
+		allDismissals,
+		inboxAnnouncements,
+		inboxKey,
+		inboxMaterials,
+		workWithContext
+	} from '#lib/db/queries.ts';
 	import { live, primeLive } from '#lib/db/live.svelte.ts';
 	import { syncColorOverrides } from '#lib/course-colors.svelte.ts';
 	import { watchForNewItems } from '#lib/notifications.svelte.ts';

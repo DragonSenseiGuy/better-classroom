@@ -1,6 +1,6 @@
 <script lang="ts">
 	import * as ContextMenu from '#lib/components/ui/context-menu/index.js';
-	import { setCoursePrefs } from '#lib/course-prefs.ts';
+	import { setCoursePrefs } from '#lib/api.ts';
 	import { notify } from '#lib/toast.ts';
 	import { displayName } from '#lib/format.ts';
 	import type { Snippet } from 'svelte';

@@ -1,24 +1,14 @@
-import type { WorkSummary } from './work';
+import { errorMessage, submitWork, type SubmissionAction } from '#lib/api.ts';
+import type { WorkSummary } from '#lib/work.ts';
 
-export type SubmissionAction = 'turnIn' | 'reclaim';
+export type { SubmissionAction };
 export type ItemState = 'pending' | 'running' | 'done' | 'failed';
 export type Progress = { id: string; title: string; state: ItemState; error?: string };
 
 const CONCURRENCY = 4;
 
-async function run(action: SubmissionAction, w: WorkSummary) {
-	const res = await fetch('/api/submissions', {
-		method: 'POST',
-		headers: { 'content-type': 'application/json' },
-		body: JSON.stringify({
-			action,
-			courseId: w.courseId,
-			workId: w.id,
-			submissionId: w.submissionId
-		})
-	});
-	if (!res.ok) throw new Error((await res.text()).replace(/^.*"message":"([^"]*)".*$/s, '$1'));
-}
+const run = (action: SubmissionAction, w: WorkSummary) =>
+	submitWork(action, { courseId: w.courseId, workId: w.id, submissionId: w.submissionId });
 
 export async function runBatch(
 	action: SubmissionAction,
@@ -38,7 +28,7 @@ export async function runBatch(
 				progress[i].state = 'done';
 			} catch (err) {
 				progress[i].state = 'failed';
-				progress[i].error = err instanceof Error ? err.message : String(err);
+				progress[i].error = errorMessage(err);
 			}
 			emit();
 		}

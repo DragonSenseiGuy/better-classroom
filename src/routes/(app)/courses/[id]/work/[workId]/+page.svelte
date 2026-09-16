@@ -1,7 +1,15 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { useLiveQuery, eq } from '@tanstack/svelte-db';
-	import { courses, courseWork, submissions, topics } from '#lib/db/collections.ts';
+	import { courses, courseWork, submissions } from '#lib/db/collections.ts';
+	import { topicById } from '#lib/db/queries.ts';
+	import {
+		comments as commentsApi,
+		errorMessage,
+		submissionFiles,
+		submitWork,
+		type SubmissionAction
+	} from '#lib/api.ts';
 	import { summarize } from '#lib/work.ts';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Progress } from '#lib/components/ui/progress/index.js';
@@ -33,57 +41,39 @@
 	let posting = $state(false);
 	let removing = $state<string | null>(null);
 
-	const commentParams = () =>
-		w ? new URLSearchParams({ courseId: w.courseId, workId: w.id }).toString() : '';
-
 	async function loadComments() {
-		if (!w) return;
+		if (!ref) return;
 		commentsError = null;
-		const res = await fetch(`/api/comments?${commentParams()}`);
-		if (!res.ok) {
-			commentsError = (await res.text()).replace(/^.*"message":"([^"]*)".*$/s, '$1');
+		try {
+			comments = await commentsApi.list(ref);
+		} catch (err) {
+			commentsError = errorMessage(err);
 			comments = [];
-			return;
 		}
-		comments = ((await res.json()) as { comments: Comment[] }).comments;
 	}
 
 	async function postComment() {
-		if (!w || !commentDraft.trim()) return;
+		if (!ref || !commentDraft.trim()) return;
 		posting = true;
 		try {
-			const res = await fetch('/api/comments', {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ courseId: w.courseId, workId: w.id, text: commentDraft.trim() })
-			});
-			if (!res.ok) throw new Error((await res.text()).replace(/^.*"message":"([^"]*)".*$/s, '$1'));
+			await commentsApi.post(ref, commentDraft.trim());
 			commentDraft = '';
 			await loadComments();
 		} catch (err) {
-			notify('rose', 'Could not post comment', {
-				description: err instanceof Error ? err.message : String(err)
-			});
+			notify('rose', 'Could not post comment', { description: errorMessage(err) });
 		} finally {
 			posting = false;
 		}
 	}
 
 	async function removeComment(id: string) {
-		if (!w) return;
+		if (!ref) return;
 		removing = id;
 		try {
-			const res = await fetch('/api/comments', {
-				method: 'DELETE',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ courseId: w.courseId, workId: w.id, commentId: id })
-			});
-			if (!res.ok) throw new Error((await res.text()).replace(/^.*"message":"([^"]*)".*$/s, '$1'));
+			await commentsApi.remove(ref, id);
 			comments = (comments ?? []).filter((c) => c.id !== id);
 		} catch (err) {
-			notify('rose', 'Could not delete comment', {
-				description: err instanceof Error ? err.message : String(err)
-			});
+			notify('rose', 'Could not delete comment', { description: errorMessage(err) });
 		} finally {
 			removing = null;
 		}
@@ -98,59 +88,40 @@
 	let uploading = $state(false);
 	let removingFile = $state<string | null>(null);
 
-	const fail = async (res: Response) =>
-		new Error((await res.text()).replace(/^.*"message":"([^"]*)".*$/s, '$1'));
-
 	async function loadFiles() {
-		if (!w) return;
+		if (!ref) return;
 		filesError = null;
-		const res = await fetch(`/api/attachments?${commentParams()}`);
-		if (!res.ok) {
-			filesError = (await fail(res)).message;
+		try {
+			files = await submissionFiles.list(ref);
+		} catch (err) {
+			filesError = errorMessage(err);
 			files = [];
-			return;
 		}
-		files = ((await res.json()) as { files: SubmissionFile[] }).files;
 	}
 
 	async function uploadFile(e: Event) {
 		const input = e.currentTarget as HTMLInputElement;
 		const file = input.files?.[0];
 		input.value = '';
-		if (!w || !file) return;
+		if (!ref || !file) return;
 		uploading = true;
 		try {
-			const body = new FormData();
-			body.append('file', file);
-			const res = await fetch(`/api/attachments?${commentParams()}`, { method: 'POST', body });
-			if (!res.ok) throw await fail(res);
-			files = ((await res.json()) as { files: SubmissionFile[] }).files;
+			files = await submissionFiles.upload(ref, file);
 			notify('emerald', 'File attached', { description: file.name });
 		} catch (err) {
-			notify('rose', 'Could not attach file', {
-				description: err instanceof Error ? err.message : String(err),
-				duration: 10000
-			});
+			notify('rose', 'Could not attach file', { description: errorMessage(err), duration: 10000 });
 		} finally {
 			uploading = false;
 		}
 	}
 
 	async function removeFile(driveId: string) {
-		if (!w) return;
+		if (!ref) return;
 		removingFile = driveId;
 		try {
-			const res = await fetch('/api/attachments', {
-				method: 'DELETE',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ courseId: w.courseId, workId: w.id, driveId })
-			});
-			if (!res.ok) throw await fail(res);
-			files = ((await res.json()) as { files: SubmissionFile[] }).files;
+			files = await submissionFiles.remove(ref, driveId);
 		} catch (err) {
-			notify('rose', 'Could not remove file', {
-				description: err instanceof Error ? err.message : String(err)
-			});
+			notify('rose', 'Could not remove file', { description: errorMessage(err) });
 		} finally {
 			removingFile = null;
 		}
@@ -160,27 +131,19 @@
 		if (w && sub && files === null) void loadFiles();
 	});
 
-	let acting = $state<'turnIn' | 'reclaim' | null>(null);
-	async function submit(action: 'turnIn' | 'reclaim') {
-		if (!w || !sub) return;
+	let acting = $state<SubmissionAction | null>(null);
+	async function submit(action: SubmissionAction) {
+		if (!w || !ref || !sub) return;
 		acting = action;
 		try {
-			const res = await fetch('/api/submissions', {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ action, courseId: w.courseId, workId: w.id, submissionId: sub.id })
-			});
-			if (!res.ok) {
-				const text = await res.text();
-				throw new Error(text.replace(/^.*"message":"([^"]*)".*$/s, '$1'));
-			}
+			await submitWork(action, { ...ref, submissionId: sub.id });
 			notify('emerald', action === 'turnIn' ? 'Handed in' : 'Unsubmitted', {
 				description: w.title
 			});
 			if (action === 'turnIn') celebrate();
 		} catch (err) {
 			notify('rose', action === 'turnIn' ? 'Could not hand in' : 'Could not unsubmit', {
-				description: err instanceof Error ? err.message : String(err),
+				description: errorMessage(err),
 				duration: 10000
 			});
 		} finally {
@@ -197,18 +160,13 @@
 				.leftJoin({ s: submissions }, ({ w, s }) => eq(w.id, s.courseWorkId))
 				.findOne()
 	});
-	const topicQuery = useLiveQuery({
-		query: (q) =>
-			q
-				.from({ t: topics })
-				.where(({ t }) => eq(t.id, row.data?.w.topicId ?? ''))
-				.findOne()
-	});
+	const topicQuery = useLiveQuery({ query: (q) => topicById(q, row.data?.w.topicId) });
 
 	const w = $derived(
 		row.data ? summarize(row.data.w, row.data.s ?? undefined, displayName(row.data.c)) : null
 	);
 	const sub = $derived(row.data?.s ?? null);
+	const ref = $derived(w ? { courseId: w.courseId, workId: w.id } : null);
 	const dueText = $derived(
 		!w || w.dueAt === undefined
 			? 'No due date'

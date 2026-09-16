@@ -1,7 +1,6 @@
 <script lang="ts">
-	import { useLiveQuery, eq } from '@tanstack/svelte-db';
-	import { announcements, courses } from '#lib/db/collections.ts';
-	import { workWithContext } from '#lib/db/queries.ts';
+	import { useLiveQuery } from '@tanstack/svelte-db';
+	import { inboxAnnouncements, workWithContext } from '#lib/db/queries.ts';
 	import { summarize, byDue, type WorkSummary } from '#lib/work.ts';
 	import WorkItem from '#lib/components/work-item.svelte';
 	import Announcement from '#lib/components/announcement.svelte';
@@ -16,10 +15,7 @@
 	const rows = useLiveQuery({ query: workWithContext });
 	const stream = useLiveQuery({
 		query: (q) =>
-			q
-				.from({ a: announcements })
-				.innerJoin({ c: courses }, ({ a, c }) => eq(a.courseId, c.id))
-				.where(({ c }) => eq(c.hidden, false))
+			inboxAnnouncements(q)
 				.orderBy(({ a }) => a.updatedAt, 'desc')
 				.limit(12)
 	});
