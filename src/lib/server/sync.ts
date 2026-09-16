@@ -372,7 +372,9 @@ export function dismiss(id: string, dismissed: boolean) {
 	publish('dismissals', [setDismissed(id, dismissed)]);
 }
 
-let timer: ReturnType<typeof setInterval> | undefined;
+const shared = globalThis as typeof globalThis & {
+	__classroomScheduler?: ReturnType<typeof setInterval>[];
+};
 
 const TICK_MS = 30_000;
 const KEEP_ALIVE_MINUTES = 5;
@@ -403,8 +405,10 @@ function keepSessionsAlive() {
 
 /** One clock for every account: each user syncs on their own interval and backoff. */
 export function startScheduler() {
-	if (timer) return;
+	for (const timer of shared.__classroomScheduler ?? []) clearInterval(timer);
 	syncDueUsers();
-	timer = setInterval(syncDueUsers, TICK_MS);
-	setInterval(keepSessionsAlive, KEEP_ALIVE_MINUTES * 60_000);
+	shared.__classroomScheduler = [
+		setInterval(syncDueUsers, TICK_MS),
+		setInterval(keepSessionsAlive, KEEP_ALIVE_MINUTES * 60_000)
+	];
 }
