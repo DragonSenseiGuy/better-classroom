@@ -39,13 +39,7 @@
 				</Item.Description>
 			</Item.Content>
 			<Item.Actions>
-				<StatusBadge
-					status={work.status}
-					late={work.late}
-					dueAt={work.dueAt}
-					assignedGrade={work.assignedGrade}
-					maxPoints={work.maxPoints}
-				/>
+				<StatusBadge {work} />
 			</Item.Actions>
 		</a>
 	{/snippet}

@@ -15,7 +15,7 @@
 	} from '@tanstack/svelte-table';
 	import { Virtualizer } from 'virtua/svelte';
 	import { page } from '$app/state';
-	import { goto } from '$app/navigation';
+	import { setSearchParam } from '#lib/navigation.ts';
 	import * as ToggleGroup from '#lib/components/ui/toggle-group/index.js';
 	import * as Empty from '#lib/components/ui/empty/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
@@ -57,9 +57,9 @@
 	import ListIcon from '@lucide/svelte/icons/list';
 	import CalendarDaysIcon from '@lucide/svelte/icons/calendar-days';
 
-	const live = useLiveQuery({ query: workWithContext });
+	const workQuery = useLiveQuery({ query: workWithContext });
 	const all = $derived(
-		live.data.map((r) => summarize(r.w, r.s ?? undefined, displayName(r.c))).sort(byDue)
+		workQuery.data.map((r) => summarize(r.w, r.s ?? undefined, displayName(r.c))).sort(byDue)
 	);
 
 	type Filter = 'open' | 'missing' | 'done' | 'all';
@@ -73,19 +73,13 @@
 	let view = $state<View>(readView(page.url.searchParams.get('view')));
 	let sorting = $state<SortingState>([{ id: 'dueAt', desc: false }]);
 
-	function setParam(key: string, value: string | null, fallback: string) {
-		const url = new URL(page.url.href);
-		if (value === null || value === fallback) url.searchParams.delete(key);
-		else url.searchParams.set(key, value);
-		goto(url, { replace: true, shallow: true });
-	}
 	function setFilter(v: string) {
 		filter = readFilter(v);
-		setParam('filter', filter, 'open');
+		setSearchParam('filter', filter, 'open');
 	}
 	function setView(v: string) {
 		view = readView(v);
-		setParam('view', view, 'list');
+		setSearchParam('view', view, 'list');
 	}
 
 	const rows = $derived.by(() => {
@@ -95,9 +89,7 @@
 			case 'missing':
 				return all.filter((w) => w.status === 'missing');
 			case 'done':
-				return all.filter(
-					(w) => w.status === 'turnedIn' || w.status === 'returned' || w.status === 'graded'
-				);
+				return all.filter((w) => !isOpen(w));
 			default:
 				return all;
 		}
@@ -367,13 +359,7 @@
 									{#if w.hasDueTime && w.dueAt}<span class="text-muted-foreground tabular-nums"
 											>{formatTime(w.dueAt)}</span
 										>{/if}
-									<StatusBadge
-										status={w.status}
-										late={w.late}
-										dueAt={w.dueAt}
-										assignedGrade={w.assignedGrade}
-										maxPoints={w.maxPoints}
-									/>
+									<StatusBadge work={w} />
 								</span>
 							</a>
 						</li>
@@ -531,15 +517,7 @@
 							: 'text-muted-foreground'}">{formatDue(w.dueAt, w.hasDueTime)}</td
 					>
 					<td class="px-2 py-2.5 text-muted-foreground tabular-nums">{w.maxPoints ?? ''}</td>
-					<td class="px-2 py-2.5 pr-4 sm:pr-6 lg:pr-8"
-						><StatusBadge
-							status={w.status}
-							late={w.late}
-							dueAt={w.dueAt}
-							assignedGrade={w.assignedGrade}
-							maxPoints={w.maxPoints}
-						/></td
-					>
+					<td class="px-2 py-2.5 pr-4 sm:pr-6 lg:pr-8"><StatusBadge work={w} /></td>
 				{/snippet}
 			</Virtualizer>
 		</table>

@@ -10,7 +10,7 @@
 		submitWork,
 		type SubmissionAction
 	} from '#lib/api.ts';
-	import { gradePercent, statusLabel, summarize } from '#lib/work.ts';
+	import { gradePercent, isOpen, statusLabel, summarize } from '#lib/work.ts';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Progress } from '#lib/components/ui/progress/index.js';
 	import { Separator } from '#lib/components/ui/separator/index.js';
@@ -195,13 +195,7 @@
 			</a>
 			<h1 class="mt-1 text-2xl font-semibold tracking-tight text-balance">{w.title}</h1>
 			<div class="mt-2 flex items-center gap-2">
-				<StatusBadge
-					status={w.status}
-					late={w.late}
-					dueAt={w.dueAt}
-					assignedGrade={w.assignedGrade}
-					maxPoints={w.maxPoints}
-				/>
+				<StatusBadge work={w} />
 			</div>
 		</div>
 		{#if w.alternateLink}
@@ -286,7 +280,7 @@
 										class="min-w-0 flex-1 truncate underline-offset-2 hover:underline"
 										>{f.title ?? f.driveId}</a
 									>
-									{#if w.status === 'assigned' || w.status === 'missing'}
+									{#if isOpen(w)}
 										<button
 											type="button"
 											class="rounded p-0.5 text-muted-foreground hover:text-destructive disabled:opacity-50"
@@ -303,7 +297,7 @@
 							{/each}
 						</ul>
 					{/if}
-					{#if w.status === 'assigned' || w.status === 'missing'}
+					{#if isOpen(w)}
 						<label
 							class="mt-2 inline-flex cursor-pointer items-center gap-2 text-sm font-medium text-foreground underline-offset-2 hover:underline"
 						>
@@ -316,7 +310,7 @@
 					{/if}
 				{/if}
 				<div class="mt-4 flex flex-wrap gap-2">
-					{#if w.status === 'assigned' || w.status === 'missing'}
+					{#if isOpen(w)}
 						<Button size="sm" onclick={() => submit('turnIn')} disabled={acting !== null}>
 							{#if acting === 'turnIn'}<LoaderIcon
 									data-icon="inline-start"

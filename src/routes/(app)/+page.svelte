@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { useLiveQuery } from '@tanstack/svelte-db';
 	import { inboxAnnouncements, workWithContext } from '#lib/db/queries.ts';
-	import { summarize, byDue, type WorkSummary } from '#lib/work.ts';
+	import { summarize, byDue, isOpen, type WorkSummary } from '#lib/work.ts';
+	import { groupBy } from '#lib/group.ts';
 	import WorkItem from '#lib/components/work-item.svelte';
 	import Announcement from '#lib/components/announcement.svelte';
 	import * as Empty from '#lib/components/ui/empty/index.js';
@@ -25,16 +26,15 @@
 	const work = $derived(
 		rows.data.map((r) => summarize(r.w, r.s ?? undefined, displayName(r.c), now)).sort(byDue)
 	);
-	const open = $derived(work.filter((w) => w.status === 'assigned' || w.status === 'missing'));
+	const open = $derived(work.filter(isOpen));
 	const missing = $derived(open.filter((w) => w.status === 'missing'));
 
 	type Group = { key: string; label: string; items: WorkSummary[] };
 	const groups = $derived.by(() => {
-		const map = new Map<number, WorkSummary[]>();
-		for (const w of open.filter((w) => w.dueAt !== undefined && w.dueAt >= now).slice(0, 30)) {
-			const day = dueDayStart(w.dueAt!, w.hasDueTime);
-			map.set(day, [...(map.get(day) ?? []), w]);
-		}
+		const map = groupBy(
+			open.filter((w) => w.dueAt !== undefined && w.dueAt >= now).slice(0, 30),
+			(w) => dueDayStart(w.dueAt!, w.hasDueTime)
+		);
 		const out: Group[] = [];
 		if (missing.length)
 			out.push({ key: 'missing', label: 'Overdue', items: missing.slice(-8).reverse() });

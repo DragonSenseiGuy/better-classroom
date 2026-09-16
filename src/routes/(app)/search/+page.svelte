@@ -1,8 +1,7 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
 	import { untrack } from 'svelte';
-	import type { SearchHit } from '#lib/shared/types.ts';
-	import type { SearchDoc } from '#lib/shared/types.ts';
+	import { setSearchParam } from '#lib/navigation.ts';
+	import { createSearch, kindIcon, kindLabel } from '#lib/search.svelte.ts';
 	import { Input } from '#lib/components/ui/input/index.js';
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import * as Item from '#lib/components/ui/item/index.js';
@@ -10,58 +9,18 @@
 	import { formatDue, formatRelative } from '#lib/format.ts';
 	import CourseDot from '#lib/components/course-dot.svelte';
 	import SearchIcon from '@lucide/svelte/icons/search';
-	import ClipboardListIcon from '@lucide/svelte/icons/clipboard-list';
-	import BookOpenIcon from '@lucide/svelte/icons/book-open';
-	import MegaphoneIcon from '@lucide/svelte/icons/megaphone';
 
 	let { data } = $props();
 	let query = $state(untrack(() => data.q));
 	const trimmed = $derived(query.trim());
-	let hits = $state<SearchHit<SearchDoc>[]>([]);
-	let loading = $state(false);
-	let controller: AbortController | undefined;
-	$effect(() => {
-		const q = trimmed;
-		controller?.abort();
-		if (!q) {
-			hits = [];
-			return;
-		}
-		const c = (controller = new AbortController());
-		loading = true;
-		fetch(`/api/search?q=${encodeURIComponent(q)}&limit=50`, { signal: c.signal })
-			.then((r) => r.json())
-			.then((res: SearchHit<SearchDoc>[]) => {
-				if (!c.signal.aborted) hits = res;
-			})
-			.catch(() => {})
-			.finally(() => {
-				if (!c.signal.aborted) loading = false;
-			});
-	});
-
-	const kindIcon = {
-		work: ClipboardListIcon,
-		material: BookOpenIcon,
-		announcement: MegaphoneIcon,
-		course: BookOpenIcon
-	} as const;
-	const kindLabel = {
-		work: 'Assignment',
-		material: 'Material',
-		announcement: 'Announcement',
-		course: 'Course'
-	} as const;
+	const search = createSearch(() => trimmed, 50);
+	const hits = $derived(search.hits);
+	const loading = $derived(search.loading);
 
 	let timer: ReturnType<typeof setTimeout>;
 	function onInput() {
 		clearTimeout(timer);
-		timer = setTimeout(() => {
-			const url = new URL(location.href);
-			if (trimmed) url.searchParams.set('q', trimmed);
-			else url.searchParams.delete('q');
-			goto(url, { replace: true, shallow: true });
-		}, 250);
+		timer = setTimeout(() => setSearchParam('q', trimmed || null), 250);
 	}
 </script>
 

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { richSegments } from '#lib/rich-text.ts';
-	import { sanitizeHtml } from '#lib/rich-html.ts';
+	import { LINK_CLASS, sanitizeHtml } from '#lib/rich-html.ts';
 
 	let {
 		text,
@@ -21,7 +21,7 @@
 					href={s.href}
 					target="_blank"
 					rel="noopener noreferrer"
-					class="break-all text-primary underline underline-offset-2 hover:opacity-80"
+					class={LINK_CLASS}
 					class:font-semibold={s.bold}
 					class:italic={s.italic}>{s.text}</a
 				>

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { browser } from '$app/env';
-	import { goto } from '$app/navigation';
+	import { setSearchParam } from '#lib/navigation.ts';
 	import { live } from '#lib/db/live.svelte.ts';
 	import { authClient } from '#lib/auth-client.ts';
 	import LogOutIcon from '@lucide/svelte/icons/log-out';
@@ -65,10 +65,7 @@
 	);
 	function setTab(value: string) {
 		tab = value;
-		const url = new URL(page.url.href);
-		if (value === 'connection') url.searchParams.delete('tab');
-		else url.searchParams.set('tab', value);
-		goto(url, { replace: true, shallow: true });
+		setSearchParam('tab', value, 'connection');
 	}
 
 	const courseQuery = useLiveQuery({ query: (q) => q.from({ c: courses }) });

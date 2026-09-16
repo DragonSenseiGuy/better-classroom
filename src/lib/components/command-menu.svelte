@@ -1,8 +1,7 @@
 <script lang="ts">
 	import * as Command from '#lib/components/ui/command/index.js';
 	import { goto, preloadData } from '$app/navigation';
-	import type { SearchHit } from '#lib/shared/types.ts';
-	import type { SearchDoc } from '#lib/shared/types.ts';
+	import { createSearch, kindIcon } from '#lib/search.svelte.ts';
 	import { formatDue } from '#lib/format.ts';
 	import { displayName, type CourseRef as Course } from '#lib/course.ts';
 	import CourseDot from '#lib/components/course-dot.svelte';
@@ -11,36 +10,14 @@
 	import InboxIcon from '@lucide/svelte/icons/inbox';
 	import SettingsIcon from '@lucide/svelte/icons/settings';
 	import SearchIcon from '@lucide/svelte/icons/search';
-	import ClipboardListIcon from '@lucide/svelte/icons/clipboard-list';
-	import BookOpenIcon from '@lucide/svelte/icons/book-open';
-	import MegaphoneIcon from '@lucide/svelte/icons/megaphone';
 
 	let { open = $bindable(false), courses }: { open?: boolean; courses: Course[] } = $props();
 
 	let query = $state('');
 	const trimmed = $derived(query.trim());
-	let hits = $state<SearchHit<SearchDoc>[]>([]);
-	let loading = $state(false);
-	let controller: AbortController | undefined;
-	$effect(() => {
-		const q = open ? trimmed : '';
-		controller?.abort();
-		if (!q) {
-			hits = [];
-			return;
-		}
-		const c = (controller = new AbortController());
-		loading = true;
-		fetch(`/api/search?q=${encodeURIComponent(q)}&limit=12`, { signal: c.signal })
-			.then((r) => r.json())
-			.then((res: SearchHit<SearchDoc>[]) => {
-				if (!c.signal.aborted) hits = res;
-			})
-			.catch(() => {})
-			.finally(() => {
-				if (!c.signal.aborted) loading = false;
-			});
-	});
+	const search = createSearch(() => (open ? trimmed : ''), 12);
+	const hits = $derived(search.hits);
+	const loading = $derived(search.loading);
 	const pages = [
 		{ href: '/', label: 'Home', icon: HouseIcon },
 		{ href: '/inbox', label: 'Inbox', icon: InboxIcon },
@@ -69,13 +46,6 @@
 	const results = $derived(
 		hits.filter((h) => h.doc.kind !== 'course' || !courseHits.some((c) => c.id === h.doc.id))
 	);
-
-	const kindIcon = {
-		work: ClipboardListIcon,
-		material: BookOpenIcon,
-		announcement: MegaphoneIcon,
-		course: BookOpenIcon
-	} as const;
 
 	function go(href: string) {
 		open = false;

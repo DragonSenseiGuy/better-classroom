@@ -25,6 +25,7 @@
 	import { watchForNewItems } from '#lib/notifications.svelte.ts';
 	import { titleBadge } from '#lib/title.svelte.ts';
 	import { workStatus } from '#lib/shared/status.ts';
+	import { isOpen } from '#lib/work.ts';
 	import { notify } from '#lib/toast.ts';
 	import SearchIcon from '@lucide/svelte/icons/search';
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
@@ -71,8 +72,7 @@
 		const now = Date.now();
 		let n = 0;
 		for (const r of workQuery.data) {
-			const s = workStatus(r.s ?? undefined, r.w.dueAt, now);
-			if (s === 'assigned' || s === 'missing') n++;
+			if (isOpen({ status: workStatus(r.s ?? undefined, r.w.dueAt, now) })) n++;
 		}
 		return n;
 	});

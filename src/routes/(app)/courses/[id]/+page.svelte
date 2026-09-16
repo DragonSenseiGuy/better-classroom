@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { goto } from '$app/navigation';
+	import { setSearchParam } from '#lib/navigation.ts';
+	import { groupBy } from '#lib/group.ts';
 	import { useLiveQuery, eq } from '@tanstack/svelte-db';
 	import { announcements, courses, materials, topics } from '#lib/db/collections.ts';
 	import { workInCourse } from '#lib/db/queries.ts';
@@ -56,10 +57,7 @@
 	let tab = $state(page.url.searchParams.get('tab') ?? 'classwork');
 	function setTab(value: string) {
 		tab = value;
-		const url = new URL(page.url.href);
-		if (value === 'classwork') url.searchParams.delete('tab');
-		else url.searchParams.set('tab', value);
-		goto(url, { replace: true, shallow: true });
+		setSearchParam('tab', value, 'classwork');
 	}
 
 	type Entry =
@@ -81,9 +79,7 @@
 				item: m
 			}))
 		];
-		const byTopic = new Map<string | undefined, Entry[]>();
-		for (const e of entries)
-			byTopic.set(e.item.topicId, [...(byTopic.get(e.item.topicId) ?? []), e]);
+		const byTopic = groupBy(entries, (e) => e.item.topicId);
 		const list = [
 			...topicQuery.data.map((t) => ({ id: t.id as string | undefined, name: t.name })),
 			{ id: undefined, name: 'No topic' }
