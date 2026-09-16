@@ -1,5 +1,6 @@
 import { workStatus, type WorkStatus } from '#lib/shared/status.ts';
 import type { CourseWork, Submission } from '#lib/shared/types.ts';
+import { handInBlocker } from '#lib/shared/hand-in.ts';
 
 export type WorkSummary = CourseWork & {
 	courseName: string;
@@ -27,7 +28,8 @@ export function summarize(
 	};
 }
 
-export const canTurnIn = (w: WorkSummary) => isOpen(w) && w.submissionId !== undefined;
+export const canTurnIn = (w: WorkSummary) =>
+	isOpen(w) && w.submissionId !== undefined && handInBlocker(w) === null;
 export const canReclaim = (w: WorkSummary) =>
 	w.status === 'turnedIn' && w.submissionId !== undefined;
 

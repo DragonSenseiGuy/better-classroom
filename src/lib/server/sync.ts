@@ -26,6 +26,7 @@ import { listUserIds } from './db';
 import { perUser, runAs } from './tenant';
 import { dueAt, ms } from './time';
 import type { Attachment, Change, CollectionName, SyncStatus, Teacher } from '#lib/shared/types.ts';
+import { handInBlocker } from '#lib/shared/hand-in.ts';
 
 type UserSync = {
 	state: SyncStatus;
@@ -353,6 +354,11 @@ export async function submissionAction(
 ) {
 	// The Classroom session is the only path Google allows for hand-in on
 	// teacher-created work, so it goes first; REST remains for the rest.
+	if (action === 'turnIn') {
+		const work = listByCourse('courseWork', courseId).find((w) => w.id === workId);
+		const blocker = work && handInBlocker(work);
+		if (blocker) throw new Error(blocker);
+	}
 	const web = enrichers().find((p) => p.enrich.submissionAction);
 	if (web) {
 		const { turnedIn } = await web.enrich.submissionAction!(action, courseId, workId);

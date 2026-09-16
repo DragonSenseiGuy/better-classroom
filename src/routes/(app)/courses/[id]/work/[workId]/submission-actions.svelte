@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { errorMessage, submitWork, type SubmissionAction } from '#lib/api.ts';
 	import { isOpen, type WorkSummary } from '#lib/work.ts';
+	import { handInBlocker } from '#lib/shared/hand-in.ts';
 	import { notify } from '#lib/toast.ts';
 	import { celebrate } from '#lib/celebrate.ts';
 	import { Button } from '#lib/components/ui/button/index.js';
@@ -9,6 +10,7 @@
 	import LoaderIcon from '@lucide/svelte/icons/loader-circle';
 
 	let { work, submission }: { work: WorkSummary; submission: Submission } = $props();
+	const blocker = $derived(handInBlocker(work));
 
 	let acting = $state<SubmissionAction | null>(null);
 	async function submit(action: SubmissionAction) {
@@ -35,7 +37,12 @@
 </script>
 
 <div class="mt-4 flex flex-wrap gap-2">
-	{#if isOpen(work)}
+	{#if isOpen(work) && blocker}
+		<Button size="sm" href={work.alternateLink} target="_blank" rel="noreferrer">
+			Complete in Classroom <ExternalLinkIcon data-icon="inline-end" />
+		</Button>
+		<p class="basis-full text-sm text-muted-foreground">{blocker}</p>
+	{:else if isOpen(work)}
 		<Button size="sm" onclick={() => submit('turnIn')} disabled={acting !== null}>
 			{#if acting === 'turnIn'}<LoaderIcon data-icon="inline-start" class="animate-spin" />{/if}
 			{submission.attachments.length ? 'Hand in' : 'Mark as done'}

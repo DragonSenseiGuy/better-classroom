@@ -649,6 +649,30 @@ function parseSubmission(payload: Json): WebSubmission {
 	return { turnedIn: record[5] === 2 && turnedInAt !== undefined, turnedInAt, attachments };
 }
 
+const RPC_STATUS: Record<number, string> = {
+	3: 'rejected the request',
+	5: 'could not find that item',
+	7: 'refused permission',
+	16: 'no longer accepts the saved session'
+};
+
+function describeRpcError(entry: Json[]): string {
+	const status = entry[5];
+	const code = Array.isArray(status) && typeof status[0] === 'number' ? status[0] : undefined;
+	const details = Array.isArray(status) ? status[2] : undefined;
+	const detail =
+		Array.isArray(details) && Array.isArray(details[0]) && Array.isArray(details[0][1])
+			? details[0][1][1]
+			: undefined;
+	const what = code !== undefined ? RPC_STATUS[code] : undefined;
+	const tail = [code !== undefined && `code ${code}`, detail !== undefined && `detail ${detail}`]
+		.filter(Boolean)
+		.join(', ');
+	return what
+		? `Classroom ${what} (${tail}).`
+		: `Classroom RPC failed: ${JSON.stringify(entry.slice(2, 7)).slice(0, 200)}`;
+}
+
 export function extractPayload(text: string, rpc: string): Json {
 	const lines = text.replace(/^\)\]\}'/, '').split('\n');
 	let payload: Json | undefined;
@@ -663,8 +687,7 @@ export function extractPayload(text: string, rpc: string): Json {
 		if (!Array.isArray(parsed)) continue;
 		for (const entry of parsed) {
 			if (!Array.isArray(entry) || entry[0] !== 'wrb.fr' || entry[1] !== rpc) continue;
-			if (typeof entry[2] !== 'string')
-				throw new Error(`Classroom RPC failed: ${JSON.stringify(entry.slice(2, 7)).slice(0, 200)}`);
+			if (typeof entry[2] !== 'string') throw new Error(describeRpcError(entry));
 			payload = JSON.parse(entry[2]) as Json;
 		}
 	}
