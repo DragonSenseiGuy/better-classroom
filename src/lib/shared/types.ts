@@ -142,6 +142,7 @@ export type SyncStatus = {
 	configured: boolean;
 	startedAt?: number;
 	finishedAt?: number;
+	syncedAt?: number;
 	error?: string;
 	pending: number;
 	courseCount: number;

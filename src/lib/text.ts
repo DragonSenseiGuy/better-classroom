@@ -13,8 +13,9 @@ export function pluralize(n: number, word: string) {
 }
 
 export function greeting(now = new Date()) {
-	const h = now.getHours();
-	if (h < 12) return 'Good morning';
-	if (h < 18) return 'Good afternoon';
-	return 'Good evening';
+	// const h = now.getHours();
+	// if (h < 12) return 'Good morning';
+	// if (h < 18) return 'Good afternoon';
+	// return 'Good evening';
+	return "G'day"
 }

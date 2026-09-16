@@ -153,9 +153,12 @@ const defaultSync = (): SyncStatus => ({
 
 export function getSyncStatus(): SyncStatus {
 	const stored = getMeta<Partial<SyncStatus>>('sync') ?? {};
+	const syncedAt =
+		stored.syncedAt ?? (stored.finishedAt && !stored.error ? stored.finishedAt : undefined);
 	return {
 		...defaultSync(),
 		...stored,
+		syncedAt,
 		configured: isConfigured(),
 		intervalMinutes: config.syncIntervalMinutes,
 		status: stored.status === 'running' ? 'idle' : (stored.status ?? 'idle')

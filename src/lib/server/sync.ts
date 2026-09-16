@@ -156,10 +156,12 @@ async function doSync(options: { full?: boolean }) {
 		u.backoffMinutes = errors.some((e) => QUOTA.test(e))
 			? Math.min(30, (u.backoffMinutes || config.syncIntervalMinutes) * 2)
 			: 0;
+		const finishedAt = Date.now();
 		setState({
 			status: errors.length ? 'error' : 'idle',
 			error: errors.length ? errors.join('\n') : undefined,
-			finishedAt: Date.now(),
+			finishedAt,
+			...(errors.length ? {} : { syncedAt: finishedAt }),
 			pending: 0
 		});
 		void runRichSync({ full });

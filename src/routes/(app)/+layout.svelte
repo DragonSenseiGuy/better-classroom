@@ -11,6 +11,7 @@
 	import { Kbd, KbdGroup } from '#lib/components/ui/kbd/index.js';
 	import AppSidebar from '#lib/components/app-sidebar.svelte';
 	import CommandMenu from '#lib/components/command-menu.svelte';
+	import FirstSyncBanner from '#lib/components/first-sync-banner.svelte';
 	import RenameCourseDialog from '#lib/components/rename-course-dialog.svelte';
 	import { courseEditor } from '#lib/course-editor.svelte.ts';
 	import { createDb } from '#lib/db/client.ts';
@@ -144,6 +145,7 @@
 					</Button>
 				</div>
 			</header>
+			<FirstSyncBanner />
 			<main class="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 lg:px-8">
 				{@render children()}
 			</main>
