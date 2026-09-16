@@ -4,5 +4,6 @@
 		"strict": true,
 		"types": ["$app/types", "bun"]
 	},
-	"include": ["src", "scripts", "bench", "vite.config.ts"]
+	"include": ["src", "scripts", "bench", "vite.config.ts"],
+	"exclude": ["src/service-worker.ts"]
 }

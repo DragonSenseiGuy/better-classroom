@@ -4,6 +4,8 @@ import { config, isConfigured } from './config';
 import { errorMessage } from './http';
 import { broadcast } from './events';
 import { rebuildSearchIndex } from './search';
+import { pushConfigured, sendPush } from './push';
+import { notifyPayloads } from '#lib/shared/notify.ts';
 import { enrichers, recordSource } from './providers';
 import {
 	applyContent,
@@ -65,6 +67,11 @@ function publish(collection: CollectionName, changes: Change[]) {
 	const u = users();
 	u.state = { ...u.state, version: u.state.version + 1 };
 	broadcast({ type: 'changes', version: u.state.version, collection, changes });
+	// The first sync inserts the whole backlog one course at a time; pushing that
+	// would be dozens of notifications for work the user has already seen.
+	if (!pushConfigured() || !u.state.syncedAt) return;
+	const payloads = notifyPayloads(collection, changes, (id) => getCourse(id) ?? undefined);
+	if (payloads.length) void sendPush(payloads);
 }
 
 export function runSync(options: { full?: boolean } = {}): Promise<void> {

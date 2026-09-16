@@ -181,6 +181,8 @@ export type ServerEvent =
 	| { type: 'changes'; version: number; collection: CollectionName; changes: Change[] }
 	| { type: 'sync'; sync: SyncStatus };
 
+export type PushPayload = { title: string; body: string; href: string; tag: string };
+
 export type SearchHit<T = SearchDoc> = { doc: T; score: number };
 
 export type SearchDoc = {

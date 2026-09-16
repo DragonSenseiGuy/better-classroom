@@ -60,6 +60,19 @@ export const variables = defineEnvVars({
 		schema: (value) => value || 'data/classroom.sqlite',
 		description: 'Shared auth database; per-user Classroom caches live in users/ beside it'
 	},
+	VAPID_PUBLIC_KEY: {
+		schema: optional,
+		description:
+			'Public half of the Web Push keypair, sent to the browser; generate with `bunx web-push generate-vapid-keys`'
+	},
+	VAPID_PRIVATE_KEY: {
+		schema: optional,
+		description: 'Private half of the Web Push keypair; signs pushes, never leaves the server'
+	},
+	VAPID_SUBJECT: {
+		schema: (value) => value || 'mailto:hey@mahadk.com',
+		description: 'Contact the push service can reach if your pushes misbehave; a mailto: or URL'
+	},
 	SEED_USER: {
 		schema: optional,
 		description:

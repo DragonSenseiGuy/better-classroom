@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS topics (id TEXT PRIMARY KEY, courseId TEXT NOT NULL, 
 CREATE TABLE IF NOT EXISTS submissions (id TEXT PRIMARY KEY, courseId TEXT NOT NULL, data TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS dismissals (id TEXT PRIMARY KEY, data TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS pushSubscriptions (endpoint TEXT PRIMARY KEY, data TEXT NOT NULL, createdAt INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS courseWork_course ON courseWork(courseId);
 CREATE INDEX IF NOT EXISTS materials_course ON materials(courseId);
 CREATE INDEX IF NOT EXISTS announcements_course ON announcements(courseId);

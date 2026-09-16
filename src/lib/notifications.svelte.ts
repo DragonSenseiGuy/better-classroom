@@ -2,141 +2,233 @@ import { browser } from '$app/env';
 import { goto } from '$app/navigation';
 import favicon from '#lib/assets/favicon.png';
 import { onChanges } from '#lib/db/live.svelte.ts';
-import { formatDue } from '#lib/format.ts';
-import { displayName } from '#lib/course.ts';
-import type { Announcement, Change, CourseWork } from '#lib/shared/types.ts';
+import { notifyPayloads, type CourseLookup } from '#lib/shared/notify.ts';
+import type { PushPayload } from '#lib/shared/types.ts';
 
 const STORAGE = 'classroom:notifications';
 
-function stored() {
+export type NotifyMode = 'push' | 'in-page';
+
+const currentPermission = () =>
+	browser && 'Notification' in window ? Notification.permission : ('unsupported' as const);
+
+const canNotify = () => browser && 'Notification' in window;
+
+const canPush = () => canNotify() && 'serviceWorker' in navigator && 'PushManager' in window;
+
+export const notifications = $state({
+	enabled: false,
+	ready: false,
+	mode: 'push' as NotifyMode,
+	permission: currentPermission() as NotificationPermission | 'unsupported'
+});
+
+export const notificationsSupported = () =>
+	canNotify() && notifications.permission !== 'unsupported';
+
+/** Set only in the in-page fallback, where no push subscription exists to read the state from. */
+function storedFallback() {
 	if (!browser) return false;
 	try {
-		return localStorage.getItem(STORAGE) === '1';
+		return localStorage.getItem(STORAGE) === 'in-page';
 	} catch {
 		return false;
 	}
 }
 
-const currentPermission = () =>
-	browser && 'Notification' in window ? Notification.permission : ('unsupported' as const);
-
-export const notifications = $state({
-	enabled: stored() && currentPermission() === 'granted',
-	permission: currentPermission() as NotificationPermission | 'unsupported'
-});
-
-export const notificationsSupported = () => notifications.permission !== 'unsupported';
-
-function syncPermission(permission: NotificationPermission) {
-	notifications.permission = permission;
-	if (permission !== 'granted') notifications.enabled = false;
-	else notifications.enabled = stored();
-}
-
-if (browser && notificationsSupported() && navigator.permissions?.query) {
-	void navigator.permissions
-		.query({ name: 'notifications' as PermissionName })
-		.then((status) => {
-			const apply = () =>
-				syncPermission(
-					status.state === 'prompt' ? 'default' : (status.state as NotificationPermission)
-				);
-			apply();
-			status.onchange = apply;
-		})
-		.catch(() => {});
-}
-
-export async function setNotificationsEnabled(enabled: boolean) {
-	if (enabled && notifications.permission !== 'granted') {
-		notifications.permission = await Notification.requestPermission();
-		if (notifications.permission !== 'granted') enabled = false;
-	}
-	notifications.enabled = enabled;
+function rememberFallback(on: boolean) {
 	try {
-		localStorage.setItem(STORAGE, enabled ? '1' : '0');
+		if (on) localStorage.setItem(STORAGE, 'in-page');
+		else localStorage.removeItem(STORAGE);
 	} catch {}
 }
 
-export function sendTestNotification() {
-	return new Promise<boolean>((resolve) => {
-		if (notifications.permission !== 'granted') {
-			notifications.permission = currentPermission() as NotificationPermission | 'unsupported';
-			resolve(false);
-			return;
-		}
-		try {
-			const n = new Notification('Classroom', {
-				body: 'Notifications are working.',
-				tag: 'test',
-				icon: favicon
-			});
-			n.onerror = () => resolve(false);
-			n.onshow = () => resolve(true);
-			setTimeout(() => resolve(true), 1500);
-		} catch {
-			resolve(false);
-		}
-	});
+async function registration() {
+	return (await navigator.serviceWorker.getRegistration()) ?? (await navigator.serviceWorker.ready);
 }
 
-const active = () => notifications.enabled && notifications.permission === 'granted';
+async function currentSubscription() {
+	if (!canPush()) return null;
+	return (await registration()).pushManager.getSubscription();
+}
 
-type CourseLookup = (id: string) => { name: string; nickname?: string } | undefined;
+/** The server is the only thing that knows whether a push actually has anywhere to go. */
+async function serverKey(): Promise<string | null> {
+	const res = await fetch('/api/push');
+	if (!res.ok) return null;
+	const body = (await res.json()) as { configured: boolean; key: string | null };
+	return body.configured ? body.key : null;
+}
 
-function show(title: string, body: string, href: string, tag: string) {
+function urlBase64ToUint8Array(base64: string) {
+	const padded = (base64 + '='.repeat((4 - (base64.length % 4)) % 4))
+		.replace(/-/g, '+')
+		.replace(/_/g, '/');
+	return Uint8Array.from(atob(padded), (c) => c.charCodeAt(0));
+}
+
+function syncPermission(permission: NotificationPermission) {
+	notifications.permission = permission;
+	if (permission !== 'granted') {
+		notifications.enabled = false;
+		rememberFallback(false);
+	}
+}
+
+export async function initNotifications() {
+	if (!canNotify()) {
+		notifications.ready = true;
+		return;
+	}
+	notifications.permission = currentPermission() as NotificationPermission;
+	const granted = notifications.permission === 'granted';
+	const subscription = canPush() ? await currentSubscription() : null;
+	if (subscription) {
+		notifications.mode = 'push';
+		notifications.enabled = granted;
+	} else if (storedFallback()) {
+		notifications.mode = 'in-page';
+		notifications.enabled = granted;
+	} else {
+		notifications.enabled = false;
+	}
+	notifications.ready = true;
+
+	if (navigator.permissions?.query)
+		void navigator.permissions
+			.query({ name: 'notifications' as PermissionName })
+			.then((status) => {
+				const apply = () =>
+					syncPermission(
+						status.state === 'prompt' ? 'default' : (status.state as NotificationPermission)
+					);
+				apply();
+				status.onchange = apply;
+			})
+			.catch(() => {});
+}
+
+export type EnableReason = 'denied' | 'unconfigured' | 'unsupported' | 'failed';
+
+export type EnableResult =
+	{ ok: true; mode: NotifyMode } | { ok: false; reason: EnableReason; detail?: string };
+
+/**
+ * Browsers with Google's services stripped out (ungoogled-chromium forks such as
+ * Helium) still expose PushManager, then fail here because there is no push
+ * service to register with. They can still show notifications from an open tab.
+ */
+const noPushService = (err: unknown) =>
+	err instanceof DOMException && err.name === 'AbortError' && /push service/i.test(err.message);
+
+async function turnOff() {
+	const subscription = await currentSubscription();
+	if (subscription) {
+		await fetch('/api/push', {
+			method: 'DELETE',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ endpoint: subscription.endpoint })
+		}).catch(() => {});
+		await subscription.unsubscribe().catch(() => {});
+	}
+	rememberFallback(false);
+	notifications.enabled = false;
+}
+
+async function subscribeToPush(key: string): Promise<EnableResult> {
+	const reg = await registration();
+	const subscription =
+		(await reg.pushManager.getSubscription()) ??
+		(await reg.pushManager.subscribe({
+			userVisibleOnly: true,
+			applicationServerKey: urlBase64ToUint8Array(key)
+		}));
+	const res = await fetch('/api/push', {
+		method: 'POST',
+		headers: { 'content-type': 'application/json' },
+		body: JSON.stringify(subscription.toJSON())
+	});
+	if (!res.ok) return { ok: false, reason: 'failed', detail: await res.text() };
+	rememberFallback(false);
+	notifications.mode = 'push';
+	notifications.enabled = true;
+	return { ok: true, mode: 'push' };
+}
+
+function fallbackToInPage(): EnableResult {
+	rememberFallback(true);
+	notifications.mode = 'in-page';
+	notifications.enabled = true;
+	return { ok: true, mode: 'in-page' };
+}
+
+export async function setNotificationsEnabled(enabled: boolean): Promise<EnableResult> {
+	if (!canNotify()) return { ok: false, reason: 'unsupported' };
+
+	if (!enabled) {
+		await turnOff();
+		return { ok: true, mode: notifications.mode };
+	}
+
+	if (currentPermission() !== 'granted') {
+		notifications.permission = await Notification.requestPermission();
+		if (notifications.permission !== 'granted') return { ok: false, reason: 'denied' };
+	}
+
+	const key = canPush() ? await serverKey() : null;
+	if (!key) return canPush() ? { ok: false, reason: 'unconfigured' } : fallbackToInPage();
+
 	try {
-		const n = new Notification(title, { body, tag, icon: favicon });
+		return await subscribeToPush(key);
+	} catch (err) {
+		console.error('push subscription failed', err);
+		if (noPushService(err)) return fallbackToInPage();
+		return { ok: false, reason: 'failed', detail: (err as Error)?.message };
+	}
+}
+
+export async function sendTestNotification() {
+	if (notifications.mode === 'in-page') {
+		show({
+			title: 'Classroom',
+			body: 'Notifications are working.',
+			href: '/settings?tab=notifications',
+			tag: 'test'
+		});
+		return true;
+	}
+	const res = await fetch('/api/push', { method: 'PUT' });
+	return res.ok;
+}
+
+function show(payload: PushPayload) {
+	try {
+		const n = new Notification(payload.title, {
+			body: payload.body,
+			tag: payload.tag,
+			icon: favicon
+		});
 		n.onclick = () => {
 			window.focus();
-			void goto(href);
+			void goto(payload.href);
 			n.close();
 		};
 	} catch {}
 }
 
+const watching = () =>
+	notifications.enabled &&
+	notifications.mode === 'in-page' &&
+	notifications.permission === 'granted';
+
+/**
+ * Only runs where push is unavailable. Everywhere else the service worker shows
+ * these same notifications, with the tab closed or open.
+ */
 export function watchForNewItems(course: CourseLookup) {
 	if (!browser) return () => {};
 	return onChanges((name, changes) => {
-		if (!active()) return;
-		const inserts = changes.filter((c) => c.type === 'insert');
-		if (!inserts.length) return;
-		if (name === 'courseWork') notifyWork(inserts as Change<CourseWork>[], course);
-		else if (name === 'announcements')
-			notifyAnnouncements(inserts as Change<Announcement>[], course);
+		if (!watching()) return;
+		for (const payload of notifyPayloads(name, changes, course)) show(payload);
 	});
-}
-
-function notifyWork(changes: Change<CourseWork>[], course: CourseLookup) {
-	const items = changes.map((c) => c.value);
-	const c = course(items[0]!.courseId);
-	const where = c ? displayName(c) : 'Classroom';
-	if (items.length > 3) {
-		show(`${items.length} new assignments`, where, '/todo', `work:${items[0]!.courseId}`);
-		return;
-	}
-	for (const w of items)
-		show(
-			`New assignment · ${where}`,
-			`${w.title}${w.dueAt ? ` · due ${formatDue(w.dueAt, w.hasDueTime)}` : ''}`,
-			`/courses/${w.courseId}/work/${w.id}`,
-			`work:${w.id}`
-		);
-}
-
-function notifyAnnouncements(changes: Change<Announcement>[], course: CourseLookup) {
-	const items = changes.map((c) => c.value);
-	const c = course(items[0]!.courseId);
-	const where = c ? displayName(c) : 'Classroom';
-	if (items.length > 3) {
-		show(`${items.length} new posts`, where, '/inbox', `post:${items[0]!.courseId}`);
-		return;
-	}
-	for (const a of items)
-		show(
-			`New post · ${where}`,
-			a.text.slice(0, 120),
-			`/courses/${a.courseId}?tab=stream#a-${a.id}`,
-			`post:${a.id}`
-		);
 }

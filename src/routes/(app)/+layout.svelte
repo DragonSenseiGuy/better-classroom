@@ -25,7 +25,7 @@
 	} from '#lib/db/queries.ts';
 	import { live, primeLive } from '#lib/db/live.svelte.ts';
 	import { syncColorOverrides } from '#lib/course-colors.svelte.ts';
-	import { watchForNewItems } from '#lib/notifications.svelte.ts';
+	import { initNotifications, watchForNewItems } from '#lib/notifications.svelte.ts';
 	import { titleBadge } from '#lib/title.svelte.ts';
 	import { workStatus } from '#lib/shared/status.ts';
 	import { isOpen } from '#lib/work.ts';
@@ -53,6 +53,7 @@
 	$effect(() => syncColorOverrides(allCoursesQuery.data));
 	const courses = $derived(allCoursesQuery.data.filter((c) => !c.hidden).sort(byDisplayName));
 	const courseById = $derived(new Map(allCoursesQuery.data.map((c) => [c.id, c])));
+	$effect(() => void initNotifications());
 	$effect(() => watchForNewItems((id) => courseById.get(id)));
 
 	const inboxAnnouncementsQuery = useLiveQuery({ client, query: inboxAnnouncements });

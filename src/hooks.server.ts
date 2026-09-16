@@ -7,13 +7,17 @@ import {
 	DATABASE_PATH,
 	FULL_SYNC_HOURS,
 	SYNC_CONCURRENCY,
-	SYNC_INTERVAL_MINUTES
+	SYNC_INTERVAL_MINUTES,
+	VAPID_PRIVATE_KEY,
+	VAPID_PUBLIC_KEY,
+	VAPID_SUBJECT
 } from '$app/env/private';
 import { auth } from '#lib/server/auth.ts';
 import { configure, registerSourceCheck } from '#lib/server/config.ts';
 import { appsScriptProvider } from '#lib/server/apps-script.ts';
 import { webProvider } from '#lib/server/rich.ts';
 import { hasRecordSource, registerProviders } from '#lib/server/providers.ts';
+import { configurePush } from '#lib/server/push.ts';
 import { configureSecrets } from '#lib/server/secrets.ts';
 import { applySecurityHeaders } from '#lib/server/security-headers.ts';
 import { startScheduler } from '#lib/server/sync.ts';
@@ -26,6 +30,11 @@ export const init: ServerInit = async () => {
 		syncIntervalMinutes: SYNC_INTERVAL_MINUTES,
 		syncConcurrency: SYNC_CONCURRENCY,
 		fullSyncHours: FULL_SYNC_HOURS
+	});
+	configurePush({
+		publicKey: VAPID_PUBLIC_KEY,
+		privateKey: VAPID_PRIVATE_KEY,
+		subject: VAPID_SUBJECT
 	});
 	registerProviders(appsScriptProvider, webProvider);
 	registerSourceCheck(hasRecordSource);

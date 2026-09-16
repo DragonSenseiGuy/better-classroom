@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { browser } from '$app/env';
 	import {
+		initNotifications,
 		notifications,
 		notificationsSupported,
 		sendTestNotification,
@@ -13,39 +14,70 @@
 	import BellOffIcon from '@lucide/svelte/icons/bell-off';
 	import SettingsCard from './settings-card.svelte';
 
+	$effect(() => {
+		if (!notifications.ready) void initNotifications();
+	});
+
+	const REASONS: Record<string, { title: string; description: string }> = {
+		denied: {
+			title: 'Notifications blocked',
+			description: 'Allow notifications for this site in your browser settings, then try again.'
+		},
+		unconfigured: {
+			title: 'Push is not set up on the server',
+			description: 'The server has no VAPID keys, so it cannot send notifications yet.'
+		},
+		unsupported: {
+			title: 'Not supported here',
+			description: 'This browser cannot show notifications at all.'
+		},
+		failed: {
+			title: 'Could not subscribe',
+			description: 'The browser refused the push subscription. Try again in a moment.'
+		}
+	};
+
+	let busy = $state(false);
+
 	async function toggleNotifications() {
-		await setNotificationsEnabled(!notifications.enabled);
-		if (notifications.enabled) {
+		busy = true;
+		const wantOn = !notifications.enabled;
+		const result = await setNotificationsEnabled(wantOn);
+		busy = false;
+		if (!result.ok) {
+			const reason = REASONS[result.reason]!;
+			notify('rose', reason.title, { description: reason.description, duration: 8000 });
+		} else if (wantOn) {
 			notify('emerald', 'Notifications on', {
-				description: 'You’ll hear about new assignments and posts as they sync.'
-			});
-		} else if (notifications.permission === 'denied') {
-			notify('rose', 'Notifications blocked', {
-				description: 'Allow notifications for this site in your browser settings, then try again.',
-				duration: 8000
+				description:
+					result.mode === 'push'
+						? 'New assignments and posts will reach you even with this tab closed.'
+						: 'This browser has no push service, so notifications only appear while the app is open in a tab.',
+				duration: result.mode === 'push' ? 5000 : 9000
 			});
 		}
 	}
+
 	let testing = $state(false);
+
 	async function testNotification() {
 		testing = true;
-		const shown = await sendTestNotification();
+		const sent = await sendTestNotification();
 		testing = false;
-		if (shown) {
+		if (sent)
 			notify('emerald', 'Test sent', {
 				description:
-					'If nothing appeared, check that Chrome is allowed to notify you in your system settings and that Do Not Disturb is off.',
-				duration: 8000
+					notifications.mode === 'push'
+						? 'It travels through your browser’s push service, so give it a second. If nothing appears, check that your browser may notify you in your system settings and that Do Not Disturb is off.'
+						: 'If nothing appeared, check that your browser may notify you in your system settings and that Do Not Disturb is off.',
+				duration: 9000
 			});
-		} else {
+		else
 			notify('rose', 'Could not send the test', {
 				description:
-					notifications.permission === 'granted'
-						? 'Your browser refused to show the notification.'
-						: 'Your browser has not granted notification permission for this site. Turn notifications off and on again to ask.',
+					'The server could not push to this browser. Try turning notifications off and on again.',
 				duration: 8000
 			});
-		}
 	}
 </script>
 
@@ -54,11 +86,16 @@
 		<div>
 			<h2 class="text-base font-semibold tracking-tight">Browser notifications</h2>
 			<p class="mt-1 text-sm text-pretty text-muted-foreground">
-				Get a notification when a new assignment or post lands during a sync. Only fires while this
-				app is open in a tab.
+				Get a notification when a new assignment or post lands during a sync.
+				{#if notifications.enabled && notifications.mode === 'in-page'}
+					This browser has no push service, so these only appear while the app is open in a tab.
+				{:else}
+					They are sent from the server, so they arrive whether or not this app is open — as long as
+					your browser is running.
+				{/if}
 			</p>
 		</div>
-		{#if !browser}
+		{#if !browser || !notifications.ready}
 			<Badge variant="outline" class="invisible">Off</Badge>
 		{:else if !notificationsSupported()}
 			<Badge variant="outline">Unsupported</Badge>
@@ -66,6 +103,7 @@
 			<Button
 				variant={notifications.enabled ? 'default' : 'outline'}
 				size="sm"
+				disabled={busy}
 				onclick={toggleNotifications}
 			>
 				{#if notifications.enabled}<BellIcon data-icon="inline-start" />On{:else}<BellOffIcon

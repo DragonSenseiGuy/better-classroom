@@ -362,3 +362,26 @@ export function setDismissed(id: string, dismissed: boolean): Change<Dismissal> 
 export function setProfile(profile: Profile) {
 	setMeta('profile', profile);
 }
+
+export type StoredPushSubscription = {
+	endpoint: string;
+	keys: { p256dh: string; auth: string };
+};
+
+export function savePushSubscription(subscription: StoredPushSubscription) {
+	db()
+		.query(
+			'INSERT INTO pushSubscriptions (endpoint, data, createdAt) VALUES (?, ?, ?) ON CONFLICT(endpoint) DO UPDATE SET data = excluded.data'
+		)
+		.run(subscription.endpoint, JSON.stringify(subscription), Date.now());
+}
+
+export function listPushSubscriptions(): StoredPushSubscription[] {
+	return (db().query('SELECT data FROM pushSubscriptions').all() as { data: string }[]).map(
+		(r) => JSON.parse(r.data) as StoredPushSubscription
+	);
+}
+
+export function deletePushSubscription(endpoint: string) {
+	db().query('DELETE FROM pushSubscriptions WHERE endpoint = ?').run(endpoint);
+}
