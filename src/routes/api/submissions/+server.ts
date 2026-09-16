@@ -1,29 +1,22 @@
 import { error, json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { readJson, upstream } from '#lib/server/http.ts';
 import { submissionAction, type SubmissionAction } from '#lib/server/sync.ts';
 
 const ACTIONS: SubmissionAction[] = ['turnIn', 'reclaim'];
 
 export const POST: RequestHandler = async ({ request }) => {
-	const body = (await request.json()) as {
-		action?: string;
-		courseId?: string;
-		workId?: string;
-		submissionId?: string;
-	};
-	if (!ACTIONS.includes(body.action as SubmissionAction))
-		error(400, 'action must be turnIn or reclaim');
-	for (const key of ['courseId', 'workId', 'submissionId'] as const)
-		if (typeof body[key] !== 'string' || !body[key]) error(400, `${key} is required`);
-	try {
-		const submission = await submissionAction(
-			body.action as SubmissionAction,
-			body.courseId!,
-			body.workId!,
-			body.submissionId!
-		);
-		return json({ ok: true, submission });
-	} catch (err) {
-		error(502, err instanceof Error ? err.message : String(err));
-	}
+	const body = await readJson<{
+		action: SubmissionAction;
+		courseId: string;
+		workId: string;
+		submissionId: string;
+	}>(request);
+	const { action, courseId, workId, submissionId } = body;
+	if (!action || !ACTIONS.includes(action)) error(400, 'action must be turnIn or reclaim');
+	if (!courseId) error(400, 'courseId is required');
+	if (!workId) error(400, 'workId is required');
+	if (!submissionId) error(400, 'submissionId is required');
+	const submission = await upstream(() => submissionAction(action, courseId, workId, submissionId));
+	return json({ ok: true, submission });
 };

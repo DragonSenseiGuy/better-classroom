@@ -1,3 +1,4 @@
+import { errorMessage } from './http';
 import { getConnection } from './store';
 import type { Provider } from './providers';
 
@@ -143,7 +144,7 @@ export async function testConnection(url: string, key: string): Promise<Connecti
 		return {
 			ok: false,
 			code: 'network',
-			message: `Could not reach Google: ${err instanceof Error ? err.message : String(err)}`
+			message: `Could not reach Google: ${errorMessage(err)}`
 		};
 	}
 	let body: unknown;

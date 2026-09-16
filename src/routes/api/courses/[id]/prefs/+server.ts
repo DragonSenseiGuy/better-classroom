@@ -1,11 +1,12 @@
 import { error, json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { readJson } from '#lib/server/http.ts';
 import { updateCoursePrefs } from '#lib/server/sync.ts';
 import type { CoursePrefs } from '#lib/server/store.ts';
 import { COLOR_NAMES } from '#lib/shared/colors.ts';
 
 export const POST: RequestHandler = async ({ params, request }) => {
-	const body = (await request.json()) as CoursePrefs;
+	const body = await readJson<CoursePrefs>(request);
 	const patch: CoursePrefs = {};
 	if ('nickname' in body) {
 		if (body.nickname !== null && typeof body.nickname !== 'string')

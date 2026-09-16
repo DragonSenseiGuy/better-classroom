@@ -1,9 +1,10 @@
 import { error, json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { readJson } from '#lib/server/http.ts';
 import { dismiss } from '#lib/server/sync.ts';
 
 export const POST: RequestHandler = async ({ request }) => {
-	const body = (await request.json()) as { ids?: string[]; dismissed?: boolean };
+	const body = await readJson<{ ids: string[]; dismissed: boolean }>(request);
 	if (
 		!Array.isArray(body.ids) ||
 		body.ids.some((id) => typeof id !== 'string' || !/^(announcement|work|material):/.test(id))

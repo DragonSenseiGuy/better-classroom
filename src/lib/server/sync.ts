@@ -1,6 +1,7 @@
 import type { RawCourseContent, RawTeacher } from './classroom';
 import { warmAvatars } from './avatars';
 import { config, isConfigured } from './config';
+import { errorMessage } from './http';
 import { broadcast } from './events';
 import { rebuildSearchIndex } from './search';
 import { enrichers, recordSource } from './providers';
@@ -139,7 +140,7 @@ async function doSync(options: { full?: boolean }) {
 					if (unknown.users.length || unknown.topics)
 						errors.push(...(await resolveUnknown(c.id, c.name, unknown.users)));
 				} catch (err) {
-					errors.push(`${c.name}: ${err instanceof Error ? err.message : String(err)}`);
+					errors.push(`${c.name}: ${errorMessage(err)}`);
 				}
 				setState({ pending: Math.max(0, u.state.pending - 1) });
 			}
@@ -163,7 +164,7 @@ async function doSync(options: { full?: boolean }) {
 		});
 		void runRichSync({ full });
 	} catch (err) {
-		const message = err instanceof Error ? err.message : String(err);
+		const message = errorMessage(err);
 		u.backoffMinutes = QUOTA.test(message)
 			? Math.min(30, (u.backoffMinutes || config.syncIntervalMinutes) * 2)
 			: 0;

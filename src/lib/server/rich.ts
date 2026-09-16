@@ -19,6 +19,7 @@ import {
 	type WebTokens
 } from './classroom-web';
 import { warmAvatars } from './avatars';
+import { errorMessage } from './http';
 import {
 	findPost,
 	getKeepAlive,
@@ -258,7 +259,7 @@ async function walk(session: WebSession, full: boolean, publish: Publish): Promi
 			} while (token && page < MAX_PAGES);
 		} catch (err) {
 			if (err instanceof SessionError) return failure(err, session);
-			errors.push(`${course.name}: ${err instanceof Error ? err.message : String(err)}`);
+			errors.push(`${course.name}: ${errorMessage(err)}`);
 		}
 	}
 	return {
@@ -275,9 +276,7 @@ function failure(err: unknown, session: WebSession): RichStatus {
 		ok: false,
 		message: expired
 			? `Classroom session no longer works: ${err.message} Paste a fresh cookie in Settings.`
-			: err instanceof Error
-				? err.message
-				: String(err),
+			: errorMessage(err),
 		at: Date.now(),
 		expired,
 		sessionSavedAt: session.savedAt
@@ -487,7 +486,7 @@ export async function probeSession(cookie: string): Promise<ProbeResult> {
 		try {
 			tokens = await loadTokens(jar, authuser);
 		} catch (err) {
-			attempt.error = err instanceof Error ? err.message : String(err);
+			attempt.error = errorMessage(err);
 			if (attempt.error.includes('redirected to')) break;
 			continue;
 		}
@@ -507,7 +506,7 @@ export async function probeSession(cookie: string): Promise<ProbeResult> {
 				found += page.items.length;
 				if (found > 0) break;
 			} catch (err) {
-				attempt.error = err instanceof Error ? err.message : String(err);
+				attempt.error = errorMessage(err);
 				attempt.courses.push({ id: course.id, name: course.name, items: 0, raw: raw[0] });
 				break;
 			}
