@@ -17,13 +17,35 @@ function stored() {
 	}
 }
 
+const currentPermission = () =>
+	browser && 'Notification' in window ? Notification.permission : ('unsupported' as const);
+
 export const notifications = $state({
-	enabled: stored(),
-	permission: (browser && 'Notification' in window ? Notification.permission : 'unsupported') as
-		NotificationPermission | 'unsupported'
+	enabled: stored() && currentPermission() === 'granted',
+	permission: currentPermission() as NotificationPermission | 'unsupported'
 });
 
 export const notificationsSupported = () => notifications.permission !== 'unsupported';
+
+function syncPermission(permission: NotificationPermission) {
+	notifications.permission = permission;
+	if (permission !== 'granted') notifications.enabled = false;
+	else notifications.enabled = stored();
+}
+
+if (browser && notificationsSupported() && navigator.permissions?.query) {
+	void navigator.permissions
+		.query({ name: 'notifications' as PermissionName })
+		.then((status) => {
+			const apply = () =>
+				syncPermission(
+					status.state === 'prompt' ? 'default' : (status.state as NotificationPermission)
+				);
+			apply();
+			status.onchange = apply;
+		})
+		.catch(() => {});
+}
 
 export async function setNotificationsEnabled(enabled: boolean) {
 	if (enabled && notifications.permission !== 'granted') {
@@ -36,17 +58,41 @@ export async function setNotificationsEnabled(enabled: boolean) {
 	} catch {}
 }
 
+export function sendTestNotification() {
+	return new Promise<boolean>((resolve) => {
+		if (notifications.permission !== 'granted') {
+			notifications.permission = currentPermission() as NotificationPermission | 'unsupported';
+			resolve(false);
+			return;
+		}
+		try {
+			const n = new Notification('Classroom', {
+				body: 'Notifications are working.',
+				tag: 'test',
+				icon: favicon
+			});
+			n.onerror = () => resolve(false);
+			n.onshow = () => resolve(true);
+			setTimeout(() => resolve(true), 1500);
+		} catch {
+			resolve(false);
+		}
+	});
+}
+
 const active = () => notifications.enabled && notifications.permission === 'granted';
 
 type CourseLookup = (id: string) => { name: string; nickname?: string } | undefined;
 
 function show(title: string, body: string, href: string, tag: string) {
-	const n = new Notification(title, { body, tag, icon: favicon });
-	n.onclick = () => {
-		window.focus();
-		void goto(href);
-		n.close();
-	};
+	try {
+		const n = new Notification(title, { body, tag, icon: favicon });
+		n.onclick = () => {
+			window.focus();
+			void goto(href);
+			n.close();
+		};
+	} catch {}
 }
 
 export function watchForNewItems(course: CourseLookup) {

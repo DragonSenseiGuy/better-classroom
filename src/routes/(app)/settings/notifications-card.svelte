@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { browser } from '$app/env';
-	import favicon from '#lib/assets/favicon.png';
 	import {
 		notifications,
 		notificationsSupported,
+		sendTestNotification,
 		setNotificationsEnabled
 	} from '#lib/notifications.svelte.ts';
 	import { notify } from '#lib/toast.ts';
@@ -26,8 +26,26 @@
 			});
 		}
 	}
-	function testNotification() {
-		new Notification('Classroom', { body: 'Notifications are working.', icon: favicon });
+	let testing = $state(false);
+	async function testNotification() {
+		testing = true;
+		const shown = await sendTestNotification();
+		testing = false;
+		if (shown) {
+			notify('emerald', 'Test sent', {
+				description:
+					'If nothing appeared, check that Chrome is allowed to notify you in your system settings and that Do Not Disturb is off.',
+				duration: 8000
+			});
+		} else {
+			notify('rose', 'Could not send the test', {
+				description:
+					notifications.permission === 'granted'
+						? 'Your browser refused to show the notification.'
+						: 'Your browser has not granted notification permission for this site. Turn notifications off and on again to ask.',
+				duration: 8000
+			});
+		}
 	}
 </script>
 
@@ -63,7 +81,9 @@
 		</p>
 	{:else if notifications.enabled}
 		<div class="border-t px-5 py-3">
-			<Button variant="outline" size="sm" onclick={testNotification}>Send a test</Button>
+			<Button variant="outline" size="sm" disabled={testing} onclick={testNotification}>
+				Send a test
+			</Button>
 		</div>
 	{/if}
 </SettingsCard>
