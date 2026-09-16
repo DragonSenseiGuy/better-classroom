@@ -32,7 +32,7 @@ export const init: ServerInit = async () => {
 	startScheduler();
 };
 
-const PUBLIC = /^\/(login|api\/auth)(\/|$)/;
+const PUBLIC = /^\/(login|privacy|api\/auth)(\/|$)/;
 
 export const handle: Handle = async ({ event, resolve }) => {
 	const session = await auth.api.getSession({ headers: event.request.headers });
