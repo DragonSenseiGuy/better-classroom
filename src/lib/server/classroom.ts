@@ -107,7 +107,7 @@ export type RawCourseContent = {
 
 const ATTEMPTS = 3;
 
-export type Ping = {
+type Ping = {
 	ok: true;
 	profile: { id: string; name?: string; email?: string; photoUrl?: string };
 	courseCount: number;

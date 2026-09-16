@@ -9,11 +9,11 @@ export const variables = defineEnvVars({
 	},
 	GOOGLE_CLIENT_ID: {
 		schema: optional,
-		description: 'OAuth client ID for direct Google sign-in'
+		description: 'OAuth client ID for Google account sign-in (Better Auth)'
 	},
 	GOOGLE_CLIENT_SECRET: {
 		schema: optional,
-		description: 'OAuth client secret for direct Google sign-in'
+		description: 'OAuth client secret for Google account sign-in (Better Auth)'
 	},
 	BETTER_AUTH_SECRET: {
 		schema: (value) => {

@@ -109,29 +109,6 @@
 	</div>
 
 	{#if !done}
-		{#if data.googleClient}
-			<section class="mb-8 rounded-xl border border-border bg-card p-4">
-				<h2 class="text-sm font-semibold">Sign in with Google</h2>
-				<p class="mt-1 text-sm text-pretty text-muted-foreground">
-					Connect directly with your Google account. Read-only access to your courses, posts,
-					coursework, and your name, email and photo.
-				</p>
-				{#if data.authError}
-					<p class="mt-2 text-xs text-destructive">
-						Google sign-in was cancelled ({data.authError}).
-					</p>
-				{/if}
-				<div class="mt-3 flex items-center gap-3">
-					<Button href="/auth/login">
-						{data.googleConnected ? 'Sign in again' : 'Sign in with Google'}
-					</Button>
-					{#if data.googleConnected}
-						<span class="text-xs text-muted-foreground">Connected.</span>
-					{/if}
-				</div>
-				<p class="mt-4 text-xs text-muted-foreground">Or connect through Apps Script below.</p>
-			</section>
-		{/if}
 		<ol class="mb-6 flex items-center gap-2 text-xs">
 			{#each steps as s, i (i)}
 				{@const state = i < step ? 'done' : i === step ? 'current' : 'todo'}

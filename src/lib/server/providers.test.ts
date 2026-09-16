@@ -10,7 +10,7 @@ import {
 import type { ProviderStatus } from '#lib/shared/types.ts';
 
 const status = (patch: Partial<ProviderStatus>): ProviderStatus => ({
-	id: 'google',
+	id: 'apps-script',
 	label: 'x',
 	role: 'records',
 	state: 'ready',
@@ -27,15 +27,15 @@ const records = {
 	}
 };
 
-let googleState: ProviderStatus['state'] = 'off';
+let secondaryState: ProviderStatus['state'] = 'off';
 let webState: ProviderStatus['state'] = 'off';
 
-const google: Provider = {
-	status: () => status({ id: 'google', state: googleState }),
+const secondary: Provider = {
+	status: () => status({ label: 'secondary', state: secondaryState }),
 	records
 };
 const appsScript: Provider = {
-	status: () => status({ id: 'apps-script', state: 'ready' }),
+	status: () => status({ state: 'ready' }),
 	records
 };
 const web: Provider = {
@@ -43,14 +43,14 @@ const web: Provider = {
 	enrich: { enrich: async () => null, keepAlive: async () => undefined }
 };
 
-registerProviders(google, appsScript, web);
+registerProviders(secondary, appsScript, web);
 
 test('the first usable record provider is primary', () => {
 	expect(recordProvider()).toBe(appsScript);
 	expect(recordSource()).toBe(records);
-	googleState = 'ready';
-	expect(recordProvider()).toBe(google);
-	googleState = 'off';
+	secondaryState = 'ready';
+	expect(recordProvider()).toBe(secondary);
+	secondaryState = 'off';
 });
 
 test('enrichers are only the usable enrichment providers', () => {
@@ -62,10 +62,10 @@ test('enrichers are only the usable enrichment providers', () => {
 
 test('statuses mark the primary source and active enrichers', () => {
 	webState = 'ready';
-	expect(providerStatuses().map((s) => [s.id, s.state, s.active])).toEqual([
-		['google', 'off', false],
-		['apps-script', 'ready', true],
-		['web', 'ready', true]
+	expect(providerStatuses().map((s) => [s.label, s.state, s.active])).toEqual([
+		['secondary', 'off', false],
+		['x', 'ready', true],
+		['x', 'ready', true]
 	]);
 	webState = 'off';
 });

@@ -3,15 +3,9 @@ import { error, redirect } from '@sveltejs/kit';
 import type { Handle, ServerInit } from '@sveltejs/kit/hooks';
 import { building } from '$app/env';
 import { svelteKitHandler } from 'better-auth/svelte-kit';
-import {
-	SYNC_INTERVAL_MINUTES,
-	DATABASE_PATH,
-	GOOGLE_CLIENT_ID,
-	GOOGLE_CLIENT_SECRET
-} from '$app/env/private';
+import { SYNC_INTERVAL_MINUTES, DATABASE_PATH } from '$app/env/private';
 import { auth } from '#lib/server/auth.ts';
 import { configure, registerSourceCheck } from '#lib/server/config.ts';
-import { googleProvider } from '#lib/server/google.ts';
 import { appsScriptProvider } from '#lib/server/classroom.ts';
 import { webProvider } from '#lib/server/rich.ts';
 import { hasRecordSource, registerProviders } from '#lib/server/providers.ts';
@@ -19,13 +13,8 @@ import { startScheduler } from '#lib/server/sync.ts';
 import { runAs } from '#lib/server/tenant.ts';
 
 export const init: ServerInit = async () => {
-	configure({
-		googleClientId: GOOGLE_CLIENT_ID || undefined,
-		googleClientSecret: GOOGLE_CLIENT_SECRET || undefined,
-		syncIntervalMinutes: SYNC_INTERVAL_MINUTES,
-		databasePath: DATABASE_PATH
-	});
-	registerProviders(googleProvider, appsScriptProvider, webProvider);
+	configure({ syncIntervalMinutes: SYNC_INTERVAL_MINUTES, databasePath: DATABASE_PATH });
+	registerProviders(appsScriptProvider, webProvider);
 	registerSourceCheck(hasRecordSource);
 	startScheduler();
 };
