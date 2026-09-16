@@ -1,4 +1,3 @@
-import type { RawCourseContent, RawLookup, RawOverview, RawSubmissionAction } from './classroom';
 import type {
 	Change,
 	CollectionName,
@@ -10,10 +9,113 @@ import type {
 
 export type Publish = (collection: CollectionName, changes: Change[]) => void;
 
+export type RawAttachment = {
+	type: string;
+	title?: string;
+	url?: string;
+	thumbnailUrl?: string;
+	shareMode?: string;
+};
+
+export type RawTeacher = { userId: string; name?: string; email?: string; photoUrl?: string };
+
+export type RawCourse = {
+	id: string;
+	name: string;
+	section?: string;
+	descriptionHeading?: string;
+	description?: string;
+	room?: string;
+	ownerId?: string;
+	courseState: string;
+	alternateLink?: string;
+	calendarId?: string;
+	creationTime?: string;
+	updateTime?: string;
+	teachers?: RawTeacher[];
+};
+
+export type RawOverview = {
+	profile: { id: string; name?: string; email?: string; photoUrl?: string };
+	courses: RawCourse[];
+	errors?: Record<string, string>;
+};
+
+export type RawLookup = {
+	teachers?: RawTeacher[];
+	topics?: { id: string; name: string; updateTime?: string }[];
+	people?: RawTeacher[];
+	errors?: Record<string, string>;
+};
+
+export type RawCourseWork = {
+	id: string;
+	title: string;
+	description?: string;
+	materials: RawAttachment[];
+	state: string;
+	alternateLink?: string;
+	creationTime?: string;
+	updateTime?: string;
+	dueDate?: { year?: number; month?: number; day?: number };
+	dueTime?: { hours?: number; minutes?: number };
+	maxPoints?: number;
+	workType?: string;
+	topicId?: string;
+	creatorUserId?: string;
+};
+
+export type RawMaterial = {
+	id: string;
+	title: string;
+	description?: string;
+	materials: RawAttachment[];
+	alternateLink?: string;
+	creationTime?: string;
+	updateTime?: string;
+	topicId?: string;
+	creatorUserId?: string;
+};
+
+export type RawAnnouncement = {
+	id: string;
+	text?: string;
+	materials: RawAttachment[];
+	alternateLink?: string;
+	creationTime?: string;
+	updateTime?: string;
+	creatorUserId?: string;
+};
+
+export type RawSubmission = {
+	id: string;
+	courseWorkId: string;
+	state: string;
+	late: boolean;
+	draftGrade?: number;
+	assignedGrade?: number;
+	alternateLink?: string;
+	courseWorkType?: string;
+	creationTime?: string;
+	updateTime?: string;
+	attachments: RawAttachment[];
+};
+
+export type RawSubmissionAction = { submission: RawSubmission };
+
+export type RawCourseContent = {
+	partial?: boolean;
+	courseWork?: RawCourseWork[];
+	materials?: RawMaterial[];
+	announcements?: RawAnnouncement[];
+	topics?: { id: string; name: string; updateTime?: string }[];
+	submissions?: RawSubmission[];
+	errors?: Record<string, string>;
+};
+
 /**
  * The record methods the sync needs from whichever provider owns courses,
- * posts and submissions. Apps Script and direct OAuth both serve the REST
- * API's shapes, so they share this contract with different transports.
+ * posts and submissions, expressed in the Classroom REST API's shapes.
  */
 export type RecordSource = {
 	overview(since: number): Promise<RawOverview>;

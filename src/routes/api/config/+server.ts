@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { testConnection } from '#lib/server/classroom.ts';
+import { testConnection } from '#lib/server/apps-script.ts';
 import { getConnection, saveConnection } from '#lib/server/store.ts';
 import { runSync, syncStatus } from '#lib/server/sync.ts';
 

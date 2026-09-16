@@ -11,7 +11,7 @@ import {
 } from '$app/env/private';
 import { auth } from '#lib/server/auth.ts';
 import { configure, registerSourceCheck } from '#lib/server/config.ts';
-import { appsScriptProvider } from '#lib/server/classroom.ts';
+import { appsScriptProvider } from '#lib/server/apps-script.ts';
 import { webProvider } from '#lib/server/rich.ts';
 import { hasRecordSource, registerProviders } from '#lib/server/providers.ts';
 import { startScheduler } from '#lib/server/sync.ts';

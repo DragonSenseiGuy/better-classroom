@@ -1,4 +1,4 @@
-import type { RawCourseContent, RawOverview } from '../src/lib/server/classroom';
+import type { RawCourseContent, RawOverview } from '../src/lib/server/providers';
 
 const SUBJECTS: readonly (readonly [string, string, readonly string[]])[] = [
 	['Mathematics', 'Mr Okafor', ['Algebra', 'Geometry', 'Statistics']],

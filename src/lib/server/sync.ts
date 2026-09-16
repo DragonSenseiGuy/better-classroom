@@ -1,4 +1,4 @@
-import type { RawCourseContent, RawTeacher } from './classroom';
+import type { RawCourseContent, RawTeacher } from './providers';
 import { warmAvatars } from './avatars';
 import { config, isConfigured } from './config';
 import { errorMessage } from './http';
