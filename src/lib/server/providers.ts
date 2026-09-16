@@ -73,9 +73,13 @@ export type Provider = {
 
 const registry: Provider[] = [];
 
-/** Registration order is priority: the first usable record source wins. */
+/**
+ * Registration order is priority: the first usable record source wins.
+ * Replaces any earlier set, since the server init hook re-runs under hot
+ * reload and duplicates would surface as repeated rows in Settings.
+ */
 export function registerProviders(...providers: Provider[]) {
-	registry.push(...providers);
+	registry.splice(0, registry.length, ...providers);
 }
 
 const usable = (p: Provider) => p.status().state !== 'off';
