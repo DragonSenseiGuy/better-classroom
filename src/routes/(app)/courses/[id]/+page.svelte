@@ -5,22 +5,22 @@
 	import { useLiveQuery, eq } from '@tanstack/svelte-db';
 	import { announcements, courses, materials, topics } from '#lib/db/collections.ts';
 	import { workInCourse } from '#lib/db/queries.ts';
-	import { gradePercent, isOpen, summarize } from '#lib/work.ts';
+	import { isOpen, summarize } from '#lib/work.ts';
 	import * as Tabs from '#lib/components/ui/tabs/index.js';
-	import UserAvatar from '#lib/components/user-avatar.svelte';
 	import * as Item from '#lib/components/ui/item/index.js';
 	import * as Empty from '#lib/components/ui/empty/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import WorkItem from '#lib/components/work-item.svelte';
 	import Announcement from '#lib/components/announcement.svelte';
-	import { formatDue, formatRelative } from '#lib/format.ts';
+	import { formatRelative } from '#lib/format.ts';
 	import { courseLabel, displayName } from '#lib/course.ts';
 	import { pluralize } from '#lib/text.ts';
 	import CourseDot from '#lib/components/course-dot.svelte';
 	import ExternalLinkIcon from '@lucide/svelte/icons/external-link';
 	import BookOpenIcon from '@lucide/svelte/icons/book-open';
 	import InboxIcon from '@lucide/svelte/icons/inbox';
-	import PercentIcon from '@lucide/svelte/icons/percent';
+	import PersonList from './person-list.svelte';
+	import GradesTab from './grades-tab.svelte';
 
 	const courseQuery = useLiveQuery({
 		query: (q) =>
@@ -90,17 +90,6 @@
 	});
 	const openCount = $derived(work.filter(isOpen).length);
 
-	const graded = $derived(
-		work
-			.filter((w) => w.assignedGrade !== undefined)
-			.sort((a, b) => (b.dueAt ?? b.updatedAt) - (a.dueAt ?? a.updatedAt))
-	);
-	const gradeTotals = $derived.by(() => {
-		const scored = graded.filter((w) => w.maxPoints);
-		const earned = scored.reduce((n, w) => n + (w.assignedGrade ?? 0), 0);
-		const possible = scored.reduce((n, w) => n + (w.maxPoints ?? 0), 0);
-		return { earned, possible, percent: possible ? Math.round((earned / possible) * 100) : null };
-	});
 	$effect(() => {
 		const hash = page.url.hash;
 		if (!hash || streamQuery.data.length === 0) return;
@@ -198,40 +187,14 @@
 		</Tabs.Content>
 		<Tabs.Content value="people" class="mt-4">
 			<h2 class="text-base font-semibold tracking-tight">Teachers</h2>
-			<ul role="list" class="mt-2 divide-y divide-border/60">
-				{#each course.teachers as t (t.userId)}
-					<li class="flex items-center gap-3 py-3">
-						<UserAvatar src={t.photoUrl} name={t.name} class="size-9" fallbackClass="text-xs" />
-						<div class="min-w-0">
-							<p class="text-sm font-medium">{t.name ?? 'Teacher'}</p>
-							{#if t.email}<a
-									href={`mailto:${t.email}`}
-									class="text-sm text-muted-foreground hover:text-foreground">{t.email}</a
-								>{/if}
-						</div>
-					</li>
-				{/each}
-			</ul>
+			<PersonList people={course.teachers} variant="teacher" />
 			{#if course.students?.length}
 				<h2 class="mt-8 text-base font-semibold tracking-tight">
 					Classmates <span class="font-normal text-muted-foreground tabular-nums"
 						>· {course.studentCount ?? course.students.length}</span
 					>
 				</h2>
-				<ul role="list" class="mt-2 divide-y divide-border/60">
-					{#each course.students as s, i (s.email ?? `${s.name}#${i}`)}
-						<li class="flex items-center gap-3 py-2.5">
-							<UserAvatar src={s.photoUrl} name={s.name} class="size-8" fallbackClass="text-xs" />
-							<div class="min-w-0">
-								<p class="truncate text-sm font-medium">{s.name}</p>
-								{#if s.email}<a
-										href={`mailto:${s.email}`}
-										class="text-xs text-muted-foreground hover:text-foreground">{s.email}</a
-									>{/if}
-							</div>
-						</li>
-					{/each}
-				</ul>
+				<PersonList people={course.students} variant="student" />
 			{/if}
 			{#if description}
 				<h2 class="mt-8 text-base font-semibold tracking-tight">
@@ -243,58 +206,7 @@
 			{/if}
 		</Tabs.Content>
 		<Tabs.Content value="grades" class="mt-4">
-			{#if graded.length === 0}
-				<Empty.Root class="border border-dashed">
-					<Empty.Header>
-						<Empty.Media variant="icon"><PercentIcon /></Empty.Media>
-						<Empty.Title>Nothing graded yet</Empty.Title>
-						<Empty.Description>Returned work with a grade will be listed here.</Empty.Description>
-					</Empty.Header>
-				</Empty.Root>
-			{:else}
-				<div class="flex flex-wrap items-baseline justify-between gap-2">
-					<h2 class="text-base font-semibold tracking-tight">
-						{pluralize(graded.length, 'graded assignment')}
-					</h2>
-					{#if gradeTotals.percent !== null}
-						<p class="text-sm text-muted-foreground tabular-nums">
-							Overall <span class="font-medium text-foreground">{gradeTotals.percent}%</span>
-							· {gradeTotals.earned}/{gradeTotals.possible} points
-						</p>
-					{/if}
-				</div>
-				<ul role="list" class="mt-2 divide-y divide-border/60">
-					{#each graded as w (w.id)}
-						{@const pct = gradePercent(w)}
-						<li>
-							<a
-								href={`/courses/${course.id}/work/${w.id}`}
-								class="-mx-3 flex items-center gap-4 rounded-lg px-3 py-3 hover:bg-accent/60"
-							>
-								<div class="min-w-0 flex-1">
-									<p class="truncate text-sm font-medium">{w.title}</p>
-									<p class="text-xs text-muted-foreground tabular-nums">
-										{w.dueAt !== undefined
-											? formatDue(w.dueAt, w.hasDueTime)
-											: 'No due date'}{#if w.late}
-											· late{/if}
-									</p>
-								</div>
-								<div class="w-24 shrink-0 text-right text-sm tabular-nums">
-									<span class="font-medium">{w.assignedGrade}</span>{#if w.maxPoints}<span
-											class="text-muted-foreground">/{w.maxPoints}</span
-										>{/if}
-								</div>
-								{#if pct !== null}
-									<div class="w-16 shrink-0 text-right text-sm text-muted-foreground tabular-nums">
-										{Math.round(pct)}%
-									</div>
-								{/if}
-							</a>
-						</li>
-					{/each}
-				</ul>
-			{/if}
+			<GradesTab {work} courseId={course.id} />
 		</Tabs.Content>
 	</Tabs.Root>
 {/if}
