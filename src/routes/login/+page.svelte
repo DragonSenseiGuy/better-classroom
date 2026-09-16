@@ -129,4 +129,7 @@
 			>
 		{/if}
 	</p>
+	<p class="mt-8 text-center text-xs text-muted-foreground">
+		<a href="/privacy" class="underline underline-offset-2">Privacy policy</a>
+	</p>
 </div>
