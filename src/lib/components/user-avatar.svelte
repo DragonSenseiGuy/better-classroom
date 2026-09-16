@@ -1,6 +1,7 @@
 <script lang="ts">
 	import * as Avatar from '#lib/components/ui/avatar/index.js';
-	import { avatarUrl, initials } from '#lib/format.ts';
+	import { avatarUrl } from '#lib/api.ts';
+	import { initials } from '#lib/text.ts';
 	import { cn } from '#lib/utils.js';
 
 	let {

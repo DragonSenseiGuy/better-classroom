@@ -4,7 +4,8 @@
 	import { Kbd, KbdGroup } from '#lib/components/ui/kbd/index.js';
 	import { page } from '$app/state';
 	import { afterNavigate } from '$app/navigation';
-	import { courseColor, displayName } from '#lib/format.ts';
+	import { displayName, type CourseRef as Course } from '#lib/course.ts';
+	import CourseDot from '#lib/components/course-dot.svelte';
 	import CourseMenu from '#lib/components/course-menu.svelte';
 	import RenameCourseDialog from '#lib/components/rename-course-dialog.svelte';
 	import HouseIcon from '@lucide/svelte/icons/house';
@@ -14,14 +15,6 @@
 	import SettingsIcon from '@lucide/svelte/icons/settings';
 	import GraduationCapIcon from '@lucide/svelte/icons/graduation-cap';
 
-	type Course = {
-		id: string;
-		name: string;
-		nickname?: string;
-		color?: string;
-		section?: string;
-		alternateLink?: string;
-	};
 	type Profile = { name?: string; email?: string; photoUrl?: string } | null;
 
 	let {
@@ -100,7 +93,7 @@
 								>
 									{#snippet child({ props })}
 										<a href={`/courses/${course.id}`} {...props}>
-											<span class={`size-2 shrink-0 rounded-full ${courseColor(course.id)}`}></span>
+											<CourseDot id={course.id} size="md" class="shrink-0" />
 											<span>{displayName(course)}</span>
 										</a>
 									{/snippet}

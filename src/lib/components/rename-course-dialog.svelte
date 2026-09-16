@@ -4,11 +4,11 @@
 	import { Input } from '#lib/components/ui/input/index.js';
 	import { Label } from '#lib/components/ui/label/index.js';
 	import { setCoursePrefs } from '#lib/api.ts';
+	import type { CourseRef as Course } from '#lib/course.ts';
 	import { courseColorName } from '#lib/course-colors.svelte.ts';
 	import { COLOR_CLASS, COLOR_NAMES, hashedColor, type ColorName } from '#lib/shared/colors.ts';
 	import CheckIcon from '@lucide/svelte/icons/check';
 
-	type Course = { id: string; name: string; nickname?: string; color?: string };
 	let { course = $bindable(null) }: { course?: Course | null } = $props();
 	let value = $state('');
 	let color = $state<ColorName>('emerald');

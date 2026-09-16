@@ -6,7 +6,9 @@
 	import { Button } from '#lib/components/ui/button/index.js';
 	import Attachments from '#lib/components/attachments.svelte';
 	import RichText from '#lib/components/rich-text.svelte';
-	import { courseColor, displayName, formatRelative } from '#lib/format.ts';
+	import { formatRelative } from '#lib/format.ts';
+	import { displayName } from '#lib/course.ts';
+	import CourseDot from '#lib/components/course-dot.svelte';
 	import ExternalLinkIcon from '@lucide/svelte/icons/external-link';
 
 	const row = useLiveQuery({
@@ -29,7 +31,7 @@
 				href={`/courses/${m.courseId}`}
 				class="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
 			>
-				<span class={`size-1.5 rounded-full ${courseColor(m.courseId)}`}></span>{courseName}
+				<CourseDot id={m.courseId} />{courseName}
 			</a>
 			<h1 class="mt-1 text-2xl font-semibold tracking-tight text-balance">{m.title}</h1>
 			<p class="mt-1 text-sm text-muted-foreground">

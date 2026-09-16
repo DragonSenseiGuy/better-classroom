@@ -2,7 +2,8 @@
 	import * as Item from '#lib/components/ui/item/index.js';
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import StatusBadge from '#lib/components/status-badge.svelte';
-	import { courseColor, formatDue } from '#lib/format.ts';
+	import { formatDue } from '#lib/format.ts';
+	import CourseDot from '#lib/components/course-dot.svelte';
 	import { isNew, type WorkSummary } from '#lib/work.ts';
 	import ClipboardListIcon from '@lucide/svelte/icons/clipboard-list';
 	import MessageCircleQuestionIcon from '@lucide/svelte/icons/message-circle-question';
@@ -26,7 +27,7 @@
 				</Item.Title>
 				<Item.Description class="flex items-center gap-1.5">
 					{#if showCourse}
-						<span class={`size-1.5 shrink-0 rounded-full ${courseColor(work.courseId)}`}></span>
+						<CourseDot id={work.courseId} class="shrink-0" />
 						<span class="truncate">{work.courseName}</span>
 						<span aria-hidden="true">·</span>
 					{/if}

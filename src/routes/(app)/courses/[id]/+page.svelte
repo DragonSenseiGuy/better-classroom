@@ -4,7 +4,7 @@
 	import { useLiveQuery, eq } from '@tanstack/svelte-db';
 	import { announcements, courses, materials, topics } from '#lib/db/collections.ts';
 	import { workInCourse } from '#lib/db/queries.ts';
-	import { isOpen, summarize } from '#lib/work.ts';
+	import { gradePercent, isOpen, summarize } from '#lib/work.ts';
 	import * as Tabs from '#lib/components/ui/tabs/index.js';
 	import UserAvatar from '#lib/components/user-avatar.svelte';
 	import * as Item from '#lib/components/ui/item/index.js';
@@ -12,14 +12,10 @@
 	import { Button } from '#lib/components/ui/button/index.js';
 	import WorkItem from '#lib/components/work-item.svelte';
 	import Announcement from '#lib/components/announcement.svelte';
-	import {
-		courseColor,
-		courseLabel,
-		displayName,
-		formatDue,
-		formatRelative,
-		pluralize
-	} from '#lib/format.ts';
+	import { formatDue, formatRelative } from '#lib/format.ts';
+	import { courseLabel, displayName } from '#lib/course.ts';
+	import { pluralize } from '#lib/text.ts';
+	import CourseDot from '#lib/components/course-dot.svelte';
 	import ExternalLinkIcon from '@lucide/svelte/icons/external-link';
 	import BookOpenIcon from '@lucide/svelte/icons/book-open';
 	import InboxIcon from '@lucide/svelte/icons/inbox';
@@ -109,11 +105,6 @@
 		const possible = scored.reduce((n, w) => n + (w.maxPoints ?? 0), 0);
 		return { earned, possible, percent: possible ? Math.round((earned / possible) * 100) : null };
 	});
-	const percent = (w: { assignedGrade?: number; maxPoints?: number }) =>
-		w.maxPoints && w.assignedGrade !== undefined
-			? Math.round((w.assignedGrade / w.maxPoints) * 100)
-			: null;
-
 	$effect(() => {
 		const hash = page.url.hash;
 		if (!hash || streamQuery.data.length === 0) return;
@@ -126,7 +117,7 @@
 	<div class="flex flex-wrap items-start justify-between gap-4">
 		<div class="min-w-0">
 			<div class="flex items-center gap-2">
-				<span class={`size-2.5 rounded-full ${courseColor(course.id)}`}></span>
+				<CourseDot id={course.id} size="lg" />
 				<h1 class="text-2xl font-semibold tracking-tight text-balance">{displayName(course)}</h1>
 			</div>
 			<p class="mt-1 text-sm text-muted-foreground">
@@ -278,7 +269,7 @@
 				</div>
 				<ul role="list" class="mt-2 divide-y divide-border/60">
 					{#each graded as w (w.id)}
-						{@const pct = percent(w)}
+						{@const pct = gradePercent(w)}
 						<li>
 							<a
 								href={`/courses/${course.id}/work/${w.id}`}
@@ -300,7 +291,7 @@
 								</div>
 								{#if pct !== null}
 									<div class="w-16 shrink-0 text-right text-sm text-muted-foreground tabular-nums">
-										{pct}%
+										{Math.round(pct)}%
 									</div>
 								{/if}
 							</a>

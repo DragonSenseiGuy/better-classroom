@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Badge } from '#lib/components/ui/badge/index.js';
-	import { statusLabel, isDueSoon } from '#lib/format.ts';
+	import { isDueSoon } from '#lib/format.ts';
+	import { statusLabel } from '#lib/work.ts';
 	import type { WorkStatus } from '#lib/shared/status.ts';
 
 	let {

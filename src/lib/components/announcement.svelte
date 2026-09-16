@@ -2,7 +2,9 @@
 	import UserAvatar from '#lib/components/user-avatar.svelte';
 	import Attachments from '#lib/components/attachments.svelte';
 	import RichText from '#lib/components/rich-text.svelte';
-	import { courseColor, displayName, formatRelative } from '#lib/format.ts';
+	import { formatRelative } from '#lib/format.ts';
+	import { displayName } from '#lib/course.ts';
+	import CourseDot from '#lib/components/course-dot.svelte';
 	import type { Announcement, Course } from '#lib/shared/types.ts';
 
 	let {
@@ -32,9 +34,7 @@
 					href={`/courses/${item.courseId}`}
 					class="flex items-center gap-1.5 text-muted-foreground hover:text-foreground"
 				>
-					<span class={`size-1.5 rounded-full ${courseColor(item.courseId)}`}></span>{displayName(
-						course
-					)}
+					<CourseDot id={item.courseId} />{displayName(course)}
 				</a>
 			{/if}
 			{#if showCourse}

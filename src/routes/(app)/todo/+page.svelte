@@ -33,20 +33,15 @@
 	import XIcon from '@lucide/svelte/icons/x';
 	import StatusBadge from '#lib/components/status-badge.svelte';
 	import WorkItem from '#lib/components/work-item.svelte';
-	import {
-		courseColor,
-		displayName,
-		dueDayStart,
-		formatDate,
-		formatDue,
-		pluralize,
-		startOfDay,
-		statusRank
-	} from '#lib/format.ts';
+	import { dueDayStart, formatDate, formatDue, formatTime, startOfDay } from '#lib/format.ts';
+	import { displayName } from '#lib/course.ts';
+	import { pluralize } from '#lib/text.ts';
+	import CourseDot from '#lib/components/course-dot.svelte';
 	import { useLiveQuery } from '@tanstack/svelte-db';
 	import { workWithContext } from '#lib/db/queries.ts';
 	import {
 		summarize,
+		statusRank,
 		byDue,
 		canReclaim,
 		canTurnIn,
@@ -364,16 +359,13 @@
 								class="block rounded-md border bg-card px-2 py-1.5 text-xs hover:bg-accent"
 							>
 								<span class="flex items-center gap-1.5">
-									<span class={`size-1.5 shrink-0 rounded-full ${courseColor(w.courseId)}`}></span>
+									<CourseDot id={w.courseId} class="shrink-0" />
 									<span class="truncate text-muted-foreground">{w.courseName}</span>
 								</span>
 								<span class="mt-0.5 line-clamp-2 font-medium">{w.title}</span>
 								<span class="mt-1 flex items-center gap-1">
 									{#if w.hasDueTime && w.dueAt}<span class="text-muted-foreground tabular-nums"
-											>{new Intl.DateTimeFormat('en-GB', {
-												hour: '2-digit',
-												minute: '2-digit'
-											}).format(w.dueAt)}</span
+											>{formatTime(w.dueAt)}</span
 										>{/if}
 									<StatusBadge
 										status={w.status}
@@ -528,8 +520,8 @@
 							href={`/courses/${w.courseId}`}
 							class="flex items-center gap-1.5 text-muted-foreground hover:text-foreground"
 						>
-							<span class={`size-1.5 shrink-0 rounded-full ${courseColor(w.courseId)}`}></span><span
-								class="truncate">{w.courseName}</span
+							<CourseDot id={w.courseId} class="shrink-0" /><span class="truncate"
+								>{w.courseName}</span
 							>
 						</a>
 					</td>

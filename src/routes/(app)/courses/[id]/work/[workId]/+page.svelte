@@ -10,22 +10,16 @@
 		submitWork,
 		type SubmissionAction
 	} from '#lib/api.ts';
-	import { summarize } from '#lib/work.ts';
+	import { gradePercent, statusLabel, summarize } from '#lib/work.ts';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Progress } from '#lib/components/ui/progress/index.js';
 	import { Separator } from '#lib/components/ui/separator/index.js';
 	import StatusBadge from '#lib/components/status-badge.svelte';
 	import Attachments from '#lib/components/attachments.svelte';
 	import RichText from '#lib/components/rich-text.svelte';
-	import {
-		displayName,
-		courseColor,
-		formatDateLong,
-		formatDateTime,
-		formatDue,
-		formatRelative,
-		statusLabel
-	} from '#lib/format.ts';
+	import { formatDateLong, formatDateTime, formatDue, formatRelative } from '#lib/format.ts';
+	import { displayName } from '#lib/course.ts';
+	import CourseDot from '#lib/components/course-dot.svelte';
 	import ExternalLinkIcon from '@lucide/svelte/icons/external-link';
 	import LoaderIcon from '@lucide/svelte/icons/loader-circle';
 	import { notify } from '#lib/toast.ts';
@@ -197,7 +191,7 @@
 				href={`/courses/${w.courseId}`}
 				class="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
 			>
-				<span class={`size-1.5 rounded-full ${courseColor(w.courseId)}`}></span>{w.courseName}
+				<CourseDot id={w.courseId} />{w.courseName}
 			</a>
 			<h1 class="mt-1 text-2xl font-semibold tracking-tight text-balance">{w.title}</h1>
 			<div class="mt-2 flex items-center gap-2">
@@ -265,7 +259,7 @@
 								>{w.assignedGrade}<span class="text-muted-foreground">/{w.maxPoints}</span></span
 							>
 						</div>
-						<Progress value={(w.assignedGrade / w.maxPoints) * 100} class="mt-2" />
+						<Progress value={gradePercent(w) ?? 0} class="mt-2" />
 					</div>
 				{/if}
 				<Separator class="my-4" />

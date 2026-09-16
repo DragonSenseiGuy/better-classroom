@@ -21,7 +21,9 @@
 	import SunIcon from '@lucide/svelte/icons/sun';
 	import MoonIcon from '@lucide/svelte/icons/moon';
 	import MonitorIcon from '@lucide/svelte/icons/monitor';
-	import { courseColor, displayName, formatDateTime, formatRelative } from '#lib/format.ts';
+	import { formatDateTime, formatRelative } from '#lib/format.ts';
+	import { byDisplayName, displayName } from '#lib/course.ts';
+	import CourseDot from '#lib/components/course-dot.svelte';
 	import * as Tabs from '#lib/components/ui/tabs/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Badge } from '#lib/components/ui/badge/index.js';
@@ -70,9 +72,7 @@
 	}
 
 	const courseQuery = useLiveQuery({ query: (q) => q.from({ c: courses }) });
-	const sorted = $derived(
-		courseQuery.data.slice().sort((a, b) => displayName(a).localeCompare(displayName(b)))
-	);
+	const sorted = $derived(courseQuery.data.slice().sort(byDisplayName));
 	const visible = $derived(sorted.filter((c) => !c.hidden));
 	const hidden = $derived(sorted.filter((c) => c.hidden));
 	let editing = $state<(typeof sorted)[number] | null>(null);
@@ -532,7 +532,7 @@
 		<ul role="list" class="mt-4 max-w-lg divide-y divide-border/60">
 			{#each visible as course (course.id)}
 				<li class="flex items-center gap-3 py-2">
-					<span class={`size-2.5 shrink-0 rounded-full ${courseColor(course.id)}`}></span>
+					<CourseDot id={course.id} size="lg" class="shrink-0" />
 					<span class="min-w-0 flex-1 truncate text-sm"
 						>{displayName(course)}{#if course.nickname}<span class="text-muted-foreground">
 								· {course.name}</span
@@ -560,7 +560,7 @@
 			<ul role="list" class="mt-2 max-w-lg divide-y divide-border/60">
 				{#each hidden as course (course.id)}
 					<li class="flex items-center gap-3 py-2 opacity-70">
-						<span class={`size-2.5 shrink-0 rounded-full ${courseColor(course.id)}`}></span>
+						<CourseDot id={course.id} size="lg" class="shrink-0" />
 						<span class="min-w-0 flex-1 truncate text-sm">{displayName(course)}</span>
 						<Button variant="outline" size="sm" onclick={() => setHidden(course, false)}
 							><EyeIcon data-icon="inline-start" />Show</Button

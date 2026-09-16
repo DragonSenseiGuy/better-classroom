@@ -6,7 +6,9 @@
 	import Announcement from '#lib/components/announcement.svelte';
 	import * as Empty from '#lib/components/ui/empty/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
-	import { dayLabel, displayName, dueDayStart, greeting, pluralize } from '#lib/format.ts';
+	import { dayLabel, dueDayStart } from '#lib/format.ts';
+	import { displayName } from '#lib/course.ts';
+	import { greeting, pluralize } from '#lib/text.ts';
 	import PartyPopperIcon from '@lucide/svelte/icons/party-popper';
 
 	let { data } = $props();

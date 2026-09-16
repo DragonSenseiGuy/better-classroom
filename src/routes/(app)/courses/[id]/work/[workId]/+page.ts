@@ -1,5 +1,6 @@
 import { error } from '@sveltejs/kit';
 import type { PageLoad } from './$types';
+import { displayName } from '#lib/course.ts';
 
 export const load: PageLoad = async ({ params, parent }) => {
 	const { snapshot } = await parent();
@@ -10,7 +11,7 @@ export const load: PageLoad = async ({ params, parent }) => {
 		title: work.title,
 		crumbs: [
 			{ label: 'Courses' },
-			{ label: course.nickname || course.name, href: `/courses/${course.id}` },
+			{ label: displayName(course), href: `/courses/${course.id}` },
 			{ label: work.title }
 		]
 	};

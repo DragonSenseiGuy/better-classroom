@@ -3,7 +3,7 @@ import { normalize, snippet } from './normalize';
 import type { SearchDoc } from '#lib/shared/types.ts';
 import { listAll } from './store';
 import { perUser } from './tenant';
-import { courseLabel } from '#lib/format.ts';
+import { courseLabel, displayName } from '#lib/course.ts';
 
 type Index = { docs: SearchDoc[]; hay: Haystacks; built: boolean };
 
@@ -17,7 +17,7 @@ export function rebuildSearchIndex() {
 	const courses = new Map(
 		listAll('courses')
 			.filter((c) => !c.archived && !c.hidden)
-			.map((c) => [c.id, c.nickname || c.name])
+			.map((c) => [c.id, displayName(c)])
 	);
 	const nextDocs: SearchDoc[] = [];
 	const titles: string[] = [];
@@ -34,8 +34,8 @@ export function rebuildSearchIndex() {
 				kind: 'course',
 				id: c.id,
 				courseId: c.id,
-				courseName: c.nickname || c.name,
-				title: c.nickname || c.name,
+				courseName: displayName(c),
+				title: displayName(c),
 				snippet: [courseLabel(c.section), c.room].filter(Boolean).join(' · '),
 				href: `/courses/${c.id}`,
 				updatedAt: c.updatedAt

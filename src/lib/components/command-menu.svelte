@@ -3,7 +3,9 @@
 	import { goto, preloadData } from '$app/navigation';
 	import type { SearchHit } from '#lib/shared/types.ts';
 	import type { SearchDoc } from '#lib/shared/types.ts';
-	import { courseColor, displayName, formatDue } from '#lib/format.ts';
+	import { formatDue } from '#lib/format.ts';
+	import { displayName, type CourseRef as Course } from '#lib/course.ts';
+	import CourseDot from '#lib/components/course-dot.svelte';
 	import HouseIcon from '@lucide/svelte/icons/house';
 	import ListChecksIcon from '@lucide/svelte/icons/list-checks';
 	import InboxIcon from '@lucide/svelte/icons/inbox';
@@ -13,7 +15,6 @@
 	import BookOpenIcon from '@lucide/svelte/icons/book-open';
 	import MegaphoneIcon from '@lucide/svelte/icons/megaphone';
 
-	type Course = { id: string; name: string; nickname?: string };
 	let { open = $bindable(false), courses }: { open?: boolean; courses: Course[] } = $props();
 
 	let query = $state('');
@@ -114,7 +115,7 @@
 						value={`/courses/${course.id}`}
 						onSelect={() => go(`/courses/${course.id}`)}
 					>
-						<span class={`ml-1 size-2 rounded-full ${courseColor(course.id)}`}></span>
+						<CourseDot id={course.id} size="md" class="ml-1" />
 						<span class="ml-1">{displayName(course)}</span>
 					</Command.Item>
 				{/each}
@@ -129,8 +130,7 @@
 						<div class="grid min-w-0 flex-1">
 							<span class="truncate">{hit.doc.title}</span>
 							<span class="flex items-center gap-1.5 truncate text-xs text-muted-foreground">
-								<span class={`size-1.5 shrink-0 rounded-full ${courseColor(hit.doc.courseId)}`}
-								></span>
+								<CourseDot id={hit.doc.courseId} class="shrink-0" />
 								{hit.doc.courseName}
 								{#if hit.doc.dueAt}<span aria-hidden="true">·</span><span class="tabular-nums"
 										>{formatDue(hit.doc.dueAt, true)}</span

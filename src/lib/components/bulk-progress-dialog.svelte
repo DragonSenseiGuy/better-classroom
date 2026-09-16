@@ -2,7 +2,7 @@
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Progress } from '#lib/components/ui/progress/index.js';
-	import { pluralize } from '#lib/format.ts';
+	import { pluralize } from '#lib/text.ts';
 	import type { Progress as ItemProgress } from '#lib/submissions.ts';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import XIcon from '@lucide/svelte/icons/x';

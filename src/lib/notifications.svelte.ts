@@ -1,7 +1,8 @@
 import { browser } from '$app/env';
 import { goto } from '$app/navigation';
 import { onChanges } from '#lib/db/live.svelte.ts';
-import { displayName, formatDue } from '#lib/format.ts';
+import { formatDue } from '#lib/format.ts';
+import { displayName } from '#lib/course.ts';
 import type { Announcement, Change, CourseWork } from '#lib/shared/types.ts';
 
 const STORAGE = 'classroom:notifications';

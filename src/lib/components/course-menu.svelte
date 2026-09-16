@@ -2,20 +2,13 @@
 	import * as ContextMenu from '#lib/components/ui/context-menu/index.js';
 	import { setCoursePrefs } from '#lib/api.ts';
 	import { notify } from '#lib/toast.ts';
-	import { displayName } from '#lib/format.ts';
+	import { displayName, type CourseRef as Course } from '#lib/course.ts';
 	import type { Snippet } from 'svelte';
 	import PencilIcon from '@lucide/svelte/icons/pencil';
 	import EyeOffIcon from '@lucide/svelte/icons/eye-off';
 	import ExternalLinkIcon from '@lucide/svelte/icons/external-link';
 	import RotateCcwIcon from '@lucide/svelte/icons/rotate-ccw';
 
-	type Course = {
-		id: string;
-		name: string;
-		nickname?: string;
-		color?: string;
-		alternateLink?: string;
-	};
 	let {
 		course,
 		onRename,

@@ -23,6 +23,9 @@ export const api = {
 	del: <T = void>(path: string, body?: unknown) => send<T>(path, withBody('DELETE', body))
 };
 
+export const avatarUrl = (url: string | undefined) =>
+	url ? `/api/avatar?u=${encodeURIComponent(url)}` : undefined;
+
 export type SubmissionAction = 'turnIn' | 'reclaim';
 export type CoursePrefs = { nickname?: string | null; color?: string | null; hidden?: boolean };
 export type WorkRef = { courseId: string; workId: string };

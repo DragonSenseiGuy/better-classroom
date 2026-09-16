@@ -4,7 +4,7 @@
 	import { goto } from '$app/navigation';
 	import { createHotkey, createHotkeySequence } from '@tanstack/svelte-hotkeys';
 	import { DbProvider, useLiveQuery } from '@tanstack/svelte-db';
-	import { displayName } from '#lib/format.ts';
+	import { byDisplayName } from '#lib/course.ts';
 	import * as Sidebar from '#lib/components/ui/sidebar/index.js';
 	import * as Breadcrumb from '#lib/components/ui/breadcrumb/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
@@ -47,11 +47,7 @@
 		query: (q) => q.from({ c: coursesCollection })
 	});
 	$effect(() => syncColorOverrides(allCoursesQuery.data));
-	const courses = $derived(
-		allCoursesQuery.data
-			.filter((c) => !c.hidden)
-			.sort((a, b) => displayName(a).localeCompare(displayName(b)))
-	);
+	const courses = $derived(allCoursesQuery.data.filter((c) => !c.hidden).sort(byDisplayName));
 	const courseById = $derived(new Map(allCoursesQuery.data.map((c) => [c.id, c])));
 	$effect(() => watchForNewItems((id) => courseById.get(id)));
 

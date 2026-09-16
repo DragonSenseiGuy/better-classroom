@@ -39,6 +39,20 @@ export const isOpen = (w: { status: WorkStatus }) =>
 export const isNew = (w: { createdAt: number; status: WorkStatus }, now = Date.now()) =>
 	isOpen(w) && now - w.createdAt < NEW_WINDOW;
 
+export const statusLabel: Record<WorkStatus, string> = {
+	graded: 'Graded',
+	returned: 'Returned',
+	turnedIn: 'Turned in',
+	missing: 'Missing',
+	assigned: 'Assigned'
+};
+
+export const statusRank = (status: WorkStatus) =>
+	({ missing: 0, assigned: 1, returned: 2, turnedIn: 3, graded: 4 })[status];
+
+export const gradePercent = (w: { assignedGrade?: number; maxPoints?: number }) =>
+	w.maxPoints && w.assignedGrade !== undefined ? (w.assignedGrade / w.maxPoints) * 100 : null;
+
 export const byDue = (
 	a: { dueAt?: number; updatedAt: number },
 	b: { dueAt?: number; updatedAt: number }

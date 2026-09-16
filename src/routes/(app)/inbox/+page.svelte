@@ -14,7 +14,10 @@
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Kbd, KbdGroup } from '#lib/components/ui/kbd/index.js';
-	import { courseColor, displayName, formatRelative, pluralize } from '#lib/format.ts';
+	import { formatRelative } from '#lib/format.ts';
+	import { displayName } from '#lib/course.ts';
+	import { pluralize } from '#lib/text.ts';
+	import CourseDot from '#lib/components/course-dot.svelte';
 	import type { Announcement as AnnouncementRow, Course, Material } from '#lib/shared/types.ts';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import UndoIcon from '@lucide/svelte/icons/undo-2';
@@ -206,7 +209,7 @@
 									<p
 										class="mt-0.5 flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground"
 									>
-										<span class={`size-1.5 rounded-full ${courseColor(item.course.id)}`}></span>
+										<CourseDot id={item.course.id} />
 										<a href={`/courses/${item.course.id}`} class="hover:text-foreground"
 											>{displayName(item.course)}</a
 										>

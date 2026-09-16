@@ -1,5 +1,3 @@
-import type { WorkStatus } from '#lib/shared/status.ts';
-
 const DAY = 86_400_000;
 
 const SHORT: Intl.DateTimeFormatOptions = { weekday: 'short', day: 'numeric', month: 'short' };
@@ -44,6 +42,8 @@ const fullFmt = new Intl.DateTimeFormat('en-GB', {
 	hour: '2-digit',
 	minute: '2-digit'
 });
+
+export const formatTime = (t: number) => timeFmt.format(t);
 
 export function startOfDay(t: number) {
 	const d = new Date(t);
@@ -102,53 +102,4 @@ export function formatRelative(t: number, now = Date.now()) {
 
 export function isDueSoon(dueAt: number | undefined, now = Date.now()) {
 	return dueAt !== undefined && dueAt >= now && dueAt - now < 2 * DAY;
-}
-
-export const statusLabel: Record<WorkStatus, string> = {
-	graded: 'Graded',
-	returned: 'Returned',
-	turnedIn: 'Turned in',
-	missing: 'Missing',
-	assigned: 'Assigned'
-};
-
-export function statusRank(status: WorkStatus) {
-	return { missing: 0, assigned: 1, returned: 2, turnedIn: 3, graded: 4 }[status];
-}
-
-export { courseColor } from '#lib/course-colors.svelte.ts';
-
-export function initials(name: string | undefined) {
-	if (!name) return '?';
-	return name
-		.split(/\s+/)
-		.filter(Boolean)
-		.slice(0, 2)
-		.map((p) => p[0]!.toUpperCase())
-		.join('');
-}
-
-export function pluralize(n: number, word: string) {
-	return `${n} ${word}${n === 1 ? '' : 's'}`;
-}
-
-export function greeting(now = new Date()) {
-	const h = now.getHours();
-	if (h < 12) return 'Good morning';
-	if (h < 18) return 'Good afternoon';
-	return 'Good evening';
-}
-
-export function displayName(course: { name: string; nickname?: string }) {
-	return course.nickname || course.name;
-}
-
-const placeholderLabels = new Set(['YEAR_GROUP', 'HOUSE_GROUP']);
-
-export function courseLabel(value: string | undefined) {
-	return value && !placeholderLabels.has(value.trim()) ? value : undefined;
-}
-
-export function avatarUrl(url: string | undefined) {
-	return url ? `/api/avatar?u=${encodeURIComponent(url)}` : undefined;
 }

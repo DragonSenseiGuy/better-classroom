@@ -1,13 +1,13 @@
 <script lang="ts">
 	import * as Item from '#lib/components/ui/item/index.js';
-	import { avatarUrl } from '#lib/format.ts';
+	import { avatarUrl } from '#lib/api.ts';
+	import type { Attachment } from '#lib/shared/types.ts';
 	import FileTextIcon from '@lucide/svelte/icons/file-text';
 	import YoutubeIcon from '@lucide/svelte/icons/circle-play';
 	import LinkIcon from '@lucide/svelte/icons/link';
 	import ClipboardPenIcon from '@lucide/svelte/icons/clipboard-pen';
 	import ExternalLinkIcon from '@lucide/svelte/icons/external-link';
 
-	type Attachment = { type: string; title?: string; url?: string; thumbnailUrl?: string };
 	let { items }: { items: Attachment[] } = $props();
 
 	const icons = {

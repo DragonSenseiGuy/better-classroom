@@ -7,7 +7,8 @@
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import * as Item from '#lib/components/ui/item/index.js';
 	import * as Empty from '#lib/components/ui/empty/index.js';
-	import { courseColor, formatDue, formatRelative } from '#lib/format.ts';
+	import { formatDue, formatRelative } from '#lib/format.ts';
+	import CourseDot from '#lib/components/course-dot.svelte';
 	import SearchIcon from '@lucide/svelte/icons/search';
 	import ClipboardListIcon from '@lucide/svelte/icons/clipboard-list';
 	import BookOpenIcon from '@lucide/svelte/icons/book-open';
@@ -112,8 +113,7 @@
 								<p class="line-clamp-2 text-sm text-muted-foreground">{hit.doc.snippet}</p>
 							{/if}
 							<Item.Description class="flex items-center gap-1.5">
-								<span class={`size-1.5 shrink-0 rounded-full ${courseColor(hit.doc.courseId)}`}
-								></span>
+								<CourseDot id={hit.doc.courseId} class="shrink-0" />
 								<span class="truncate">{hit.doc.courseName}</span>
 								<span aria-hidden="true">·</span>
 								<span class="tabular-nums"
