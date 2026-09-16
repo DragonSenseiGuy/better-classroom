@@ -333,10 +333,11 @@ async function resolveUnknown(courseId: string, name: string, users: string[]) {
 
 export function updateCoursePrefs(courseId: string, patch: CoursePrefs) {
 	const change = setCoursePrefs(courseId, patch);
-	if (!change) return null;
-	publish('courses', [change]);
-	rebuildSearchIndex();
-	return change.value;
+	if (change) {
+		publish('courses', [change]);
+		rebuildSearchIndex();
+	}
+	return change?.value ?? getCourse(courseId);
 }
 
 export type SubmissionAction = 'turnIn' | 'reclaim';

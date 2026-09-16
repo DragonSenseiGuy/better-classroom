@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { probeSession } from '#lib/server/rich.ts';
 import {
+	deleteMeta,
 	getKeepAlive,
 	getMeta,
 	getRichStatus,
@@ -11,7 +12,6 @@ import {
 	setMeta
 } from '#lib/server/store.ts';
 import { runRichSync } from '#lib/server/sync.ts';
-import { db } from '#lib/server/db.ts';
 
 const summary = () => {
 	const session = getWebSession();
@@ -56,7 +56,7 @@ export const POST: RequestHandler = async ({ request }) => {
 	setMeta('richProbe', { at: Date.now(), ...result, cookie: undefined });
 	if (!result.ok) return json(result, { status: 400 });
 	saveWebSession({ cookie: result.cookie, authuser: result.authuser, savedAt: Date.now() });
-	db().query('DELETE FROM meta WHERE key = ?').run('webSessionDraft');
+	deleteMeta('webSessionDraft');
 	saveRichStatus({ ok: true, at: Date.now(), updated: 0 });
 	void runRichSync({ full: true });
 	return json({ ...result, cookie: undefined, ...summary() });

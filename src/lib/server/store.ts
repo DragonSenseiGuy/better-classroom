@@ -53,6 +53,10 @@ export function setMeta(key: string, value: unknown) {
 		.run(key, JSON.stringify(value));
 }
 
+export function deleteMeta(key: string) {
+	db().query('DELETE FROM meta WHERE key = ?').run(key);
+}
+
 export type Connection = { url: string; key: string };
 
 export const getConnection = () => getMeta<Connection>('connection') ?? null;
@@ -68,9 +72,8 @@ export const getWebSession = () => getMeta<WebSession>('webSession') ?? null;
 export function saveWebSession(session: WebSession | null) {
 	const previous = getWebSession();
 	if (session) setMeta('webSession', session);
-	else db().query('DELETE FROM meta WHERE key = ?').run('webSession');
-	if (previous?.savedAt !== session?.savedAt)
-		db().query('DELETE FROM meta WHERE key = ?').run('webKeepAlive');
+	else deleteMeta('webSession');
+	if (previous?.savedAt !== session?.savedAt) deleteMeta('webKeepAlive');
 }
 
 export const getKeepAlive = () => getMeta<KeepAlive>('webKeepAlive') ?? {};
@@ -109,18 +112,8 @@ export function setPostExtras<K extends RichTable>(
 	return { type: 'update', key: row.id, value: next };
 }
 
-export function setCourseStudents(
-	courseId: string,
-	students: Author[],
-	studentCount: number
-): Change<Course> | null {
-	const row = db().query('SELECT id, data FROM courses WHERE id = ?').get(courseId) as Row | null;
-	if (!row) return null;
-	const prev = JSON.parse(row.data) as Course;
-	const next: Course = { ...prev, students, studentCount };
-	if (stable(prev) === stable(next)) return null;
-	db().query('UPDATE courses SET data = ? WHERE id = ?').run(JSON.stringify(next), courseId);
-	return { type: 'update', key: courseId, value: next };
+export function setCourseStudents(courseId: string, students: Author[], studentCount: number) {
+	return updateCourse(courseId, (prev) => ({ ...prev, students, studentCount }));
 }
 
 export type WebProfiles = Record<string, Author>;
@@ -211,6 +204,18 @@ export function getCourse(courseId: string): Course | null {
 	return row ? (JSON.parse(row.data) as Course) : null;
 }
 
+export function updateCourse(
+	courseId: string,
+	patch: (prev: Course) => Course
+): Change<Course> | null {
+	const prev = getCourse(courseId);
+	if (!prev) return null;
+	const next = patch(prev);
+	if (stable(prev) === stable(next)) return null;
+	db().query('UPDATE courses SET data = ? WHERE id = ?').run(JSON.stringify(next), courseId);
+	return { type: 'update', key: courseId, value: next };
+}
+
 export function applyCourses(
 	courses: (Omit<
 		Course,
@@ -262,42 +267,30 @@ export function applyCourses(
 
 export type CoursePrefs = { nickname?: string | null; color?: string | null; hidden?: boolean };
 
-export function setCoursePrefs(courseId: string, patch: CoursePrefs): Change<Course> | null {
-	const row = db().query('SELECT id, data FROM courses WHERE id = ?').get(courseId) as Row | null;
-	if (!row) return null;
-	const prev = JSON.parse(row.data) as Course;
-	const next: Course = {
+export function setCoursePrefs(courseId: string, patch: CoursePrefs) {
+	return updateCourse(courseId, (prev) => ({
 		...prev,
 		nickname: patch.nickname === undefined ? prev.nickname : patch.nickname?.trim() || undefined,
 		color: patch.color === undefined ? prev.color : (patch.color ?? undefined),
 		hidden: patch.hidden ?? prev.hidden ?? false
-	};
-	db().query('UPDATE courses SET data = ? WHERE id = ?').run(JSON.stringify(next), courseId);
-	return { type: 'update', key: courseId, value: next };
+	}));
 }
 
 export function mergeCoursePeople(
 	courseId: string,
 	patch: { teachers?: Teacher[]; people?: Teacher[] }
-): Change<Course> | null {
-	const prev = getCourse(courseId);
-	if (!prev) return null;
-	const people = new Map((prev.people ?? []).map((p) => [p.userId, p]));
-	for (const p of patch.people ?? []) people.set(p.userId, p);
-	const teachers = patch.teachers?.length ? patch.teachers : prev.teachers;
-	for (const t of teachers) people.delete(t.userId);
-	const next: Course = { ...prev, teachers, people: [...people.values()] };
-	if (stable(prev) === stable(next)) return null;
-	db().query('UPDATE courses SET data = ? WHERE id = ?').run(JSON.stringify(next), courseId);
-	return { type: 'update', key: courseId, value: next };
+) {
+	return updateCourse(courseId, (prev) => {
+		const people = new Map((prev.people ?? []).map((p) => [p.userId, p]));
+		for (const p of patch.people ?? []) people.set(p.userId, p);
+		const teachers = patch.teachers?.length ? patch.teachers : prev.teachers;
+		for (const t of teachers) people.delete(t.userId);
+		return { ...prev, teachers, people: [...people.values()] };
+	});
 }
 
-export function touchCourseSynced(courseId: string): Change<Course> | null {
-	const row = db().query('SELECT id, data FROM courses WHERE id = ?').get(courseId) as Row | null;
-	if (!row) return null;
-	const next: Course = { ...(JSON.parse(row.data) as Course), lastSyncedAt: Date.now() };
-	db().query('UPDATE courses SET data = ? WHERE id = ?').run(JSON.stringify(next), courseId);
-	return { type: 'update', key: courseId, value: next };
+export function touchCourseSynced(courseId: string) {
+	return updateCourse(courseId, (prev) => ({ ...prev, lastSyncedAt: Date.now() }));
 }
 
 export function applyContent<K extends ContentTable>(
