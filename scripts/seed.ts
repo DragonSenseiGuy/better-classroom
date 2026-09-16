@@ -7,12 +7,17 @@ import {
 } from '../src/lib/server/store';
 import { shapeContent } from '../src/lib/server/sync';
 import { db, listUserIds } from '../src/lib/server/db';
+import { configure } from '../src/lib/server/config';
+import { readEnv } from '../src/lib/server/read-env';
 import { runAs } from '../src/lib/server/tenant';
 import { courseContent, courseIds, overview } from './fixtures';
 
+const env = readEnv();
+configure({ databasePath: env.DATABASE_PATH });
+
 const perCourse = Number(process.argv[2] ?? 25);
 const annPerCourse = Number(process.argv[3] ?? 8);
-const userId = process.env.SEED_USER ?? listUserIds()[0];
+const userId = env.SEED_USER ?? listUserIds()[0];
 if (!userId) {
 	console.error('No accounts yet. Sign up in the app first, or pass SEED_USER=<user id>.');
 	process.exit(1);

@@ -1,7 +1,8 @@
+import { readEnv } from '../src/lib/server/read-env';
 import { courseContent, overview } from './fixtures';
 
 const port = Number(process.argv[2] ?? 8787);
-const key = process.env.APPS_SCRIPT_KEY ?? 'mock';
+const key = readEnv().APPS_SCRIPT_KEY ?? 'mock';
 let round = 0;
 const roundsPerCourse = new Map<string, number>();
 

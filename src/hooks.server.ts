@@ -3,7 +3,12 @@ import { error, redirect } from '@sveltejs/kit';
 import type { Handle, ServerInit } from '@sveltejs/kit/hooks';
 import { building } from '$app/env';
 import { svelteKitHandler } from 'better-auth/svelte-kit';
-import { SYNC_INTERVAL_MINUTES, DATABASE_PATH } from '$app/env/private';
+import {
+	DATABASE_PATH,
+	FULL_SYNC_HOURS,
+	SYNC_CONCURRENCY,
+	SYNC_INTERVAL_MINUTES
+} from '$app/env/private';
 import { auth } from '#lib/server/auth.ts';
 import { configure, registerSourceCheck } from '#lib/server/config.ts';
 import { appsScriptProvider } from '#lib/server/classroom.ts';
@@ -13,7 +18,12 @@ import { startScheduler } from '#lib/server/sync.ts';
 import { runAs } from '#lib/server/tenant.ts';
 
 export const init: ServerInit = async () => {
-	configure({ syncIntervalMinutes: SYNC_INTERVAL_MINUTES, databasePath: DATABASE_PATH });
+	configure({
+		databasePath: DATABASE_PATH,
+		syncIntervalMinutes: SYNC_INTERVAL_MINUTES,
+		syncConcurrency: SYNC_CONCURRENCY,
+		fullSyncHours: FULL_SYNC_HOURS
+	});
 	registerProviders(appsScriptProvider, webProvider);
 	registerSourceCheck(hasRecordSource);
 	startScheduler();

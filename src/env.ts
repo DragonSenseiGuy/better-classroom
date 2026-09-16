@@ -36,5 +36,33 @@ export const variables = defineEnvVars({
 			return n;
 		}
 	},
-	DATABASE_PATH: { schema: (value) => value || 'data/classroom.sqlite' }
+	SYNC_CONCURRENCY: {
+		schema: (value) => {
+			if (!value) return 2;
+			const n = Number(value);
+			if (!Number.isInteger(n) || n < 1)
+				throw new Error('SYNC_CONCURRENCY must be a whole number of courses, 1 or more');
+			return n;
+		},
+		description: 'How many courses one sync fetches at a time'
+	},
+	FULL_SYNC_HOURS: {
+		schema: (value) => {
+			if (!value) return 6;
+			const n = Number(value);
+			if (!Number.isFinite(n) || n <= 0)
+				throw new Error('FULL_SYNC_HOURS must be a number of hours above 0');
+			return n;
+		},
+		description: 'How often a sync refetches everything instead of only recent changes'
+	},
+	DATABASE_PATH: {
+		schema: (value) => value || 'data/classroom.sqlite',
+		description: 'Shared auth database; per-user Classroom caches live in users/ beside it'
+	},
+	SEED_USER: {
+		schema: optional,
+		description:
+			'Account id that `bun run seed` fills with fixture data (defaults to the first account)'
+	}
 });
