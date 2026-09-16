@@ -2,7 +2,8 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 
 type Tenant = { userId: string };
 
-const storage = new AsyncLocalStorage<Tenant>();
+const shared = globalThis as typeof globalThis & { __classroomTenant?: AsyncLocalStorage<Tenant> };
+const storage = (shared.__classroomTenant ??= new AsyncLocalStorage<Tenant>());
 
 /** Runs `fn` with `userId` as the current tenant; every db() call inside resolves to that user's data. */
 export const runAs = <T>(userId: string, fn: () => T): T => storage.run({ userId }, fn);
