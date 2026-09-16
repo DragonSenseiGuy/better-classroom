@@ -27,6 +27,7 @@ export async function upstream<T>(work: () => Promise<T>): Promise<T> {
 		return await work();
 	} catch (err) {
 		if (isHttpError(err)) throw err;
-		error(502, errorMessage(err));
+		console.error('upstream request failed', err);
+		error(424, errorMessage(err));
 	}
 }
