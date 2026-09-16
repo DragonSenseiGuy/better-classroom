@@ -1,7 +1,8 @@
-import type { HandleClientError } from '@sveltejs/kit';
+import type { HandleClientError } from '@sveltejs/kit/hooks';
 
-export const handleError: HandleClientError = ({ error, message, status }) => {
-	const detail = error instanceof Error ? (error.stack ?? error.message) : String(error);
-	console.error(`[client error ${status}] ${message}\n${detail}`);
-	return { message: error instanceof Error ? error.message : message };
+export const handleError: HandleClientError = ({ kind, error }) => {
+	const detail =
+		error instanceof Error ? (error.stack ?? error.message) : JSON.stringify(error, null, 2);
+	console.error(`[client error: ${kind}] ${detail}`);
+	if (kind === 'unknown' && error instanceof Error) return { message: error.message };
 };
