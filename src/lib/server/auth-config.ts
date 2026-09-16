@@ -20,7 +20,8 @@ export function createAuth(env: AuthEnv) {
 			env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET
 				? { google: { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET } }
 				: {},
-		session: { cookieCache: { enabled: true, maxAge: 5 * 60 } }
+		session: { cookieCache: { enabled: true, maxAge: 5 * 60 } },
+		rateLimit: { enabled: true }
 	});
 }
 

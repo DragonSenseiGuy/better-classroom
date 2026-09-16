@@ -14,6 +14,7 @@ import type {
 	Teacher
 } from '#lib/shared/types.ts';
 import { config, isConfigured } from './config';
+import { open, seal } from './secrets';
 
 type Row = { id: string; data: string };
 
@@ -59,22 +60,35 @@ export function deleteMeta(key: string) {
 
 export type Connection = { url: string; key: string };
 
-export const getConnection = () => getMeta<Connection>('connection') ?? null;
+export function getConnection(): Connection | null {
+	const stored = getMeta<Connection>('connection');
+	return stored ? { ...stored, key: open(stored.key) } : null;
+}
 
 export function saveConnection(connection: Connection) {
-	setMeta('connection', connection);
+	setMeta('connection', { ...connection, key: seal(connection.key) });
 }
 
 export type WebSession = { cookie: string; authuser: number; savedAt: number };
 
-export const getWebSession = () => getMeta<WebSession>('webSession') ?? null;
+export function getWebSession(): WebSession | null {
+	const stored = getMeta<WebSession>('webSession');
+	return stored ? { ...stored, cookie: open(stored.cookie) } : null;
+}
 
 export function saveWebSession(session: WebSession | null) {
-	const previous = getWebSession();
-	if (session) setMeta('webSession', session);
+	const previous = getMeta<WebSession>('webSession');
+	if (session) setMeta('webSession', { ...session, cookie: seal(session.cookie) });
 	else deleteMeta('webSession');
 	if (previous?.savedAt !== session?.savedAt) deleteMeta('webKeepAlive');
 }
+
+export function getWebSessionDraft(): string | undefined {
+	const draft = getMeta<string>('webSessionDraft');
+	return draft === undefined ? undefined : open(draft);
+}
+
+export const saveWebSessionDraft = (cookie: string) => setMeta('webSessionDraft', seal(cookie));
 
 export const getKeepAlive = () => getMeta<KeepAlive>('webKeepAlive') ?? {};
 

@@ -3,6 +3,7 @@ import type { Handle, ServerInit } from '@sveltejs/kit/hooks';
 import { building } from '$app/env';
 import { svelteKitHandler } from 'better-auth/svelte-kit';
 import {
+	BETTER_AUTH_SECRET,
 	DATABASE_PATH,
 	FULL_SYNC_HOURS,
 	SYNC_CONCURRENCY,
@@ -13,10 +14,13 @@ import { configure, registerSourceCheck } from '#lib/server/config.ts';
 import { appsScriptProvider } from '#lib/server/apps-script.ts';
 import { webProvider } from '#lib/server/rich.ts';
 import { hasRecordSource, registerProviders } from '#lib/server/providers.ts';
+import { configureSecrets } from '#lib/server/secrets.ts';
+import { applySecurityHeaders } from '#lib/server/security-headers.ts';
 import { startScheduler } from '#lib/server/sync.ts';
 import { runAs } from '#lib/server/tenant.ts';
 
 export const init: ServerInit = async () => {
+	configureSecrets(BETTER_AUTH_SECRET);
 	configure({
 		databasePath: DATABASE_PATH,
 		syncIntervalMinutes: SYNC_INTERVAL_MINUTES,
@@ -42,5 +46,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 	}
 
 	const run = () => svelteKitHandler({ event, resolve, auth, building });
-	return event.locals.user ? runAs(event.locals.user.id, run) : run();
+	const response = await (event.locals.user ? runAs(event.locals.user.id, run) : run());
+	applySecurityHeaders(response.headers, event.url);
+	return response;
 };

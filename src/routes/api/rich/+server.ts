@@ -7,8 +7,10 @@ import {
 	getMeta,
 	getRichStatus,
 	getWebSession,
+	getWebSessionDraft,
 	saveRichStatus,
 	saveWebSession,
+	saveWebSessionDraft,
 	setMeta
 } from '#lib/server/store.ts';
 import { runRichSync } from '#lib/server/sync.ts';
@@ -40,7 +42,7 @@ export const POST: RequestHandler = async ({ request }) => {
 	}
 	let cookie: string;
 	if (body.retry === true) {
-		const draft = getMeta<string>('webSessionDraft');
+		const draft = getWebSessionDraft();
 		if (!draft) return json({ ok: false, message: 'No cookie to retry with.' }, { status: 400 });
 		cookie = draft;
 	} else {
@@ -50,7 +52,7 @@ export const POST: RequestHandler = async ({ request }) => {
 				{ status: 400 }
 			);
 		cookie = body.cookie.replace(/^cookie:\s*/i, '').trim();
-		setMeta('webSessionDraft', cookie);
+		saveWebSessionDraft(cookie);
 	}
 	const result = await probeSession(cookie);
 	setMeta('richProbe', { at: Date.now(), ...result, cookie: undefined });
