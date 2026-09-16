@@ -1,9 +1,4 @@
-import type {
-	RawCourseContent,
-	RawLookup,
-	RawOverview,
-	RawSubmissionAction
-} from './classroom';
+import type { RawCourseContent, RawLookup, RawOverview, RawSubmissionAction } from './classroom';
 import type {
 	Change,
 	CollectionName,
@@ -22,7 +17,11 @@ export type Publish = (collection: CollectionName, changes: Change[]) => void;
  */
 export type RecordSource = {
 	overview(since: number): Promise<RawOverview>;
-	courseContent(courseId: string, since: number, wantSubmissions: boolean): Promise<RawCourseContent>;
+	courseContent(
+		courseId: string,
+		since: number,
+		wantSubmissions: boolean
+	): Promise<RawCourseContent>;
 	lookup(courseId: string, users: string[]): Promise<RawLookup>;
 	submissionAction(
 		action: 'turnIn' | 'reclaim',
@@ -90,7 +89,8 @@ export const hasRecordSource = () => recordProvider() !== null;
 
 export function recordSource(): RecordSource {
 	const provider = recordProvider();
-	if (!provider?.records) throw new Error('No Classroom source is connected. Finish setup at /setup.');
+	if (!provider?.records)
+		throw new Error('No Classroom source is connected. Finish setup at /setup.');
 	return provider.records;
 }
 
@@ -101,6 +101,9 @@ export function providerStatuses(): ProviderStatus[] {
 	const primary = recordProvider();
 	return registry.map((p) => {
 		const status = p.status();
-		return { ...status, active: status.role === 'records' ? p === primary : status.state !== 'off' };
+		return {
+			...status,
+			active: status.role === 'records' ? p === primary : status.state !== 'off'
+		};
 	});
 }

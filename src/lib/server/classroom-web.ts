@@ -619,8 +619,7 @@ function parseComment(node: Json): WebComment | null {
 	const rich = node.find((v) => Array.isArray(v) && v[0] === 'edu.rt') as Json[] | undefined;
 	const author = Array.isArray(node[4]) ? node[4][0] : undefined;
 	const createdAt = node.slice(1, 4).find((v) => typeof v === 'number' && v > 1e12) as
-		| number
-		| undefined;
+		number | undefined;
 	const box = rich?.[4];
 	return {
 		id: String(head[0]),

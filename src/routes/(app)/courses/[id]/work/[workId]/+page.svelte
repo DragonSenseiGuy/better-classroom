@@ -174,7 +174,9 @@
 				const text = await res.text();
 				throw new Error(text.replace(/^.*"message":"([^"]*)".*$/s, '$1'));
 			}
-			notify('emerald', action === 'turnIn' ? 'Handed in' : 'Unsubmitted', { description: w.title });
+			notify('emerald', action === 'turnIn' ? 'Handed in' : 'Unsubmitted', {
+				description: w.title
+			});
 			if (action === 'turnIn') celebrate();
 		} catch (err) {
 			notify('rose', action === 'turnIn' ? 'Could not hand in' : 'Could not unsubmit', {
@@ -329,7 +331,8 @@
 										href={f.url ?? `https://drive.google.com/file/d/${f.driveId}/view`}
 										target="_blank"
 										rel="noreferrer"
-										class="min-w-0 flex-1 truncate underline-offset-2 hover:underline">{f.title ?? f.driveId}</a
+										class="min-w-0 flex-1 truncate underline-offset-2 hover:underline"
+										>{f.title ?? f.driveId}</a
 									>
 									{#if w.status === 'assigned' || w.status === 'missing'}
 										<button
@@ -339,7 +342,9 @@
 											disabled={removingFile === f.driveId}
 											onclick={() => removeFile(f.driveId)}
 										>
-											{#if removingFile === f.driveId}<LoaderIcon class="size-3.5 animate-spin" />{:else}<XIcon class="size-3.5" />{/if}
+											{#if removingFile === f.driveId}<LoaderIcon
+													class="size-3.5 animate-spin"
+												/>{:else}<XIcon class="size-3.5" />{/if}
 										</button>
 									{/if}
 								</li>
@@ -350,7 +355,9 @@
 						<label
 							class="mt-2 inline-flex cursor-pointer items-center gap-2 text-sm font-medium text-foreground underline-offset-2 hover:underline"
 						>
-							{#if uploading}<LoaderIcon class="size-3.5 animate-spin" />{:else}<PaperclipIcon class="size-3.5" />{/if}
+							{#if uploading}<LoaderIcon class="size-3.5 animate-spin" />{:else}<PaperclipIcon
+									class="size-3.5"
+								/>{/if}
 							{uploading ? 'Uploading…' : 'Add file'}
 							<input type="file" class="sr-only" disabled={uploading} onchange={uploadFile} />
 						</label>
@@ -359,17 +366,34 @@
 				<div class="mt-4 flex flex-wrap gap-2">
 					{#if w.status === 'assigned' || w.status === 'missing'}
 						<Button size="sm" onclick={() => submit('turnIn')} disabled={acting !== null}>
-							{#if acting === 'turnIn'}<LoaderIcon data-icon="inline-start" class="animate-spin" />{/if}
+							{#if acting === 'turnIn'}<LoaderIcon
+									data-icon="inline-start"
+									class="animate-spin"
+								/>{/if}
 							{sub.attachments.length ? 'Hand in' : 'Mark as done'}
 						</Button>
 					{:else if w.status === 'turnedIn'}
-						<Button variant="outline" size="sm" onclick={() => submit('reclaim')} disabled={acting !== null}>
-							{#if acting === 'reclaim'}<LoaderIcon data-icon="inline-start" class="animate-spin" />{/if}
+						<Button
+							variant="outline"
+							size="sm"
+							onclick={() => submit('reclaim')}
+							disabled={acting !== null}
+						>
+							{#if acting === 'reclaim'}<LoaderIcon
+									data-icon="inline-start"
+									class="animate-spin"
+								/>{/if}
 							Unsubmit
 						</Button>
 					{/if}
 					{#if sub.alternateLink}
-						<Button variant="outline" size="sm" href={sub.alternateLink} target="_blank" rel="noreferrer">
+						<Button
+							variant="outline"
+							size="sm"
+							href={sub.alternateLink}
+							target="_blank"
+							rel="noreferrer"
+						>
 							Manage submission <ExternalLinkIcon data-icon="inline-end" />
 						</Button>
 					{/if}
