@@ -347,16 +347,11 @@ export const THEMES = [
 ] as const satisfies readonly Theme[];
 
 export type ThemeId = (typeof THEMES)[number]['id'];
-export type ThemeChoice = ThemeId | 'system';
 
 export const THEME_BY_ID: ReadonlyMap<string, Theme> = new Map(THEMES.map((t) => [t.id, t]));
 
 export const LIGHT_THEMES = THEMES.filter((t) => t.mode === 'light');
 export const DARK_THEMES = THEMES.filter((t) => t.mode === 'dark');
-
-export function themeLabel(t: Theme) {
-	return t.family === t.name || t.family === 'Default' ? t.name : `${t.family} ${t.name}`;
-}
 
 export function isThemeId(value: unknown): value is ThemeId {
 	return typeof value === 'string' && THEME_BY_ID.has(value);
@@ -382,11 +377,6 @@ function vars(p: Palette) {
 		['border', p.border],
 		['input', p.border],
 		['ring', p.primary],
-		['chart-1', p.chart[0]],
-		['chart-2', p.chart[1]],
-		['chart-3', p.chart[2]],
-		['chart-4', p.chart[3]],
-		['chart-5', p.chart[4]],
 		['sidebar', p.sidebar],
 		['sidebar-foreground', p.text],
 		['sidebar-primary', p.primary],

@@ -33,5 +33,3 @@ export function notify(
 			: undefined
 	});
 }
-
-export const dismissToast = (id: string | number) => toast.dismiss(id);
