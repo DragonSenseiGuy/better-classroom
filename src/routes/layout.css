@@ -4,7 +4,6 @@
 @import '@fontsource-variable/valley-sans';
 
 @custom-variant dark (&:where([data-mode='dark'], [data-mode='dark'] *));
-@plugin '@tailwindcss/typography';
 
 :root {
 	--background: oklch(1 0 0);

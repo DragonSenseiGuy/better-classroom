@@ -84,7 +84,9 @@ export function courseContent(
 	const topics = SUBJECTS[i]![2];
 	const rand = rng(42 + i);
 	const pick = <T>(arr: readonly T[]) => arr[Math.floor(rand() * arr.length)];
-	const content: RawCourseContent = {
+	const content: Required<
+		Pick<RawCourseContent, 'courseWork' | 'materials' | 'announcements' | 'topics' | 'submissions'>
+	> = {
 		courseWork: [],
 		materials: [],
 		announcements: [],
