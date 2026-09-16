@@ -1,4 +1,3 @@
-import '#lib/server/env-bridge.ts';
 import { error, redirect } from '@sveltejs/kit';
 import type { Handle, ServerInit } from '@sveltejs/kit/hooks';
 import { building } from '$app/env';

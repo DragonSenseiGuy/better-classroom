@@ -1,21 +1,19 @@
-import { betterAuth } from 'better-auth';
-import { authDb } from './db';
-import { readEnv } from './read-env';
+import {
+	BETTER_AUTH_SECRET,
+	BETTER_AUTH_URL,
+	GOOGLE_CLIENT_ID,
+	GOOGLE_CLIENT_SECRET
+} from '$app/env/private';
+import { createAuth, hasGoogleLogin as hasGoogle, type AuthEnv } from './auth-config';
 
-const { BETTER_AUTH_SECRET, BETTER_AUTH_URL, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET } = readEnv();
+const env: AuthEnv = {
+	BETTER_AUTH_SECRET,
+	BETTER_AUTH_URL,
+	GOOGLE_CLIENT_ID,
+	GOOGLE_CLIENT_SECRET
+};
 
-export const hasGoogleLogin = Boolean(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET);
+export const auth = createAuth(env);
+export const hasGoogleLogin = hasGoogle(env);
 
-export const auth = betterAuth({
-	database: authDb(),
-	secret: BETTER_AUTH_SECRET,
-	baseURL: BETTER_AUTH_URL,
-	emailAndPassword: { enabled: true },
-	socialProviders:
-		GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET
-			? { google: { clientId: GOOGLE_CLIENT_ID, clientSecret: GOOGLE_CLIENT_SECRET } }
-			: {},
-	session: { cookieCache: { enabled: true, maxAge: 5 * 60 } }
-});
-
-export type AuthSession = typeof auth.$Infer.Session;
+export type { AuthSession } from './auth-config';
