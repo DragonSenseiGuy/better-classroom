@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { browser } from '$app/env';
+	import favicon from '#lib/assets/favicon.png';
 	import {
 		notifications,
 		notificationsSupported,
@@ -26,7 +27,7 @@
 		}
 	}
 	function testNotification() {
-		new Notification('Classroom', { body: 'Notifications are working.', icon: '/favicon.svg' });
+		new Notification('Classroom', { body: 'Notifications are working.', icon: favicon });
 	}
 </script>
 

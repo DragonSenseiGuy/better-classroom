@@ -1,6 +1,6 @@
 <script lang="ts">
 	import './layout.css';
-	import favicon from '#lib/assets/favicon.svg';
+	import favicon from '#lib/assets/favicon.png';
 	import { page } from '$app/state';
 	import { Toaster } from '#lib/components/ui/sonner/index.js';
 	import { titleBadge } from '#lib/title.svelte.ts';
@@ -14,7 +14,7 @@
 </script>
 
 <svelte:head>
-	<link rel="icon" href={favicon} />
+	<link rel="icon" type="image/png" href={favicon} />
 	<title>{title}</title>
 	{@html `<style>${themeCss}</style>`}
 </svelte:head>

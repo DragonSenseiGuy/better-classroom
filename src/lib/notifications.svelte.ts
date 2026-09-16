@@ -1,5 +1,6 @@
 import { browser } from '$app/env';
 import { goto } from '$app/navigation';
+import favicon from '#lib/assets/favicon.png';
 import { onChanges } from '#lib/db/live.svelte.ts';
 import { formatDue } from '#lib/format.ts';
 import { displayName } from '#lib/course.ts';
@@ -40,7 +41,7 @@ const active = () => notifications.enabled && notifications.permission === 'gran
 type CourseLookup = (id: string) => { name: string; nickname?: string } | undefined;
 
 function show(title: string, body: string, href: string, tag: string) {
-	const n = new Notification(title, { body, tag, icon: '/favicon.svg' });
+	const n = new Notification(title, { body, tag, icon: favicon });
 	n.onclick = () => {
 		window.focus();
 		void goto(href);
