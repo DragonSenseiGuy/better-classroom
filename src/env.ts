@@ -57,7 +57,14 @@ export const variables = defineEnvVars({
 		description: 'How often a sync refetches everything instead of only recent changes'
 	},
 	DATABASE_PATH: {
-		schema: (value) => value || 'data/classroom.sqlite',
+		schema: (value) => {
+			if (value) return value;
+			// Vercel functions have a read-only filesystem except /tmp (which is
+			// ephemeral per instance); keep the default writable there.
+			if (typeof process !== 'undefined' && process.env.VERCEL)
+				return '/tmp/classroom/classroom.sqlite';
+			return 'data/classroom.sqlite';
+		},
 		description: 'Shared auth database; per-user Classroom caches live in users/ beside it'
 	},
 	VAPID_PUBLIC_KEY: {

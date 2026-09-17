@@ -1,4 +1,6 @@
+import { createHash } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { config } from './config';
 
@@ -32,8 +34,7 @@ function sized(raw: string) {
 }
 
 async function key(raw: string) {
-	const hash = new Bun.CryptoHasher('sha1').update(sized(raw)).digest('hex');
-	return hash;
+	return createHash('sha1').update(sized(raw)).digest('hex');
 }
 
 export async function getAvatar(raw: string): Promise<Cached | null> {
@@ -51,13 +52,14 @@ export async function getAvatar(raw: string): Promise<Cached | null> {
 
 async function load(id: string, raw: string): Promise<Cached | null> {
 	const base = join(dir(), id);
-	const meta = Bun.file(`${base}.json`);
-	if (await meta.exists()) {
-		const { type } = (await meta.json()) as { type: string };
-		const bytes = new Uint8Array(await Bun.file(base).arrayBuffer());
+	try {
+		const { type } = JSON.parse(await readFile(`${base}.json`, 'utf8')) as { type: string };
+		const bytes = new Uint8Array(await readFile(base));
 		const cached = { bytes, type, etag: `"${id}"` };
 		memory.set(id, cached);
 		return cached;
+	} catch {
+		// Cache miss; fall through to fetching from Google.
 	}
 	try {
 		const res = await fetch(sized(raw), { signal: AbortSignal.timeout(10_000) });
@@ -65,8 +67,8 @@ async function load(id: string, raw: string): Promise<Cached | null> {
 		const type = res.headers.get('content-type') ?? 'image/jpeg';
 		const bytes = new Uint8Array(await res.arrayBuffer());
 		await Promise.all([
-			Bun.write(base, bytes),
-			Bun.write(`${base}.json`, JSON.stringify({ type, url: sized(raw) }))
+			writeFile(base, bytes),
+			writeFile(`${base}.json`, JSON.stringify({ type, url: sized(raw) }))
 		]);
 		const cached = { bytes, type, etag: `"${id}"` };
 		memory.set(id, cached);

@@ -70,6 +70,6 @@ function seed() {
 		version: 1
 	});
 	console.log(
-		`Seeded ${o.courses.length} courses with ${perCourse} assignments each into ${db().filename}`
+		`Seeded ${o.courses.length} courses with ${perCourse} assignments each for user ${userId}`
 	);
 }

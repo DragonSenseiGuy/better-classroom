@@ -38,6 +38,13 @@ export const init: ServerInit = async () => {
 	});
 	registerProviders(appsScriptProvider, webProvider);
 	registerSourceCheck(hasRecordSource);
+	if (process.env.VERCEL && !building) {
+		// Serverless instances start from a blank ephemeral disk, so there is no
+		// deploy step that can run `bun run auth:migrate`. Create the Better Auth
+		// tables on cold start instead (a no-op when they already exist).
+		// Skipped during `vite build` route analysis, which only imports this module.
+		await (await auth.$context).runMigrations();
+	}
 	startScheduler();
 };
 

@@ -40,6 +40,20 @@ Open the app, create an account at `/login`, and you land on `/setup`, which wal
 
 The app syncs your courses on an interval from then on. Settings has a second, optional source: paste a Classroom cookie and the app also recovers formatted post text, classmates, comments, attachments, and hand-in, none of which the API exposes.
 
+## Deploying
+
+Docker (primary, persistent) is defined by `Dockerfile`: a long-lived Bun
+process with SQLite on disk. Set `BETTER_AUTH_SECRET` (32+ characters) and
+mount `/app/data` somewhere durable.
+
+Vercel also works: the build uses `@sveltejs/adapter-vercel` when `VERCEL`
+is set (automatic on Vercel) and falls back to `node:sqlite`, since
+`bun:sqlite` doesn't exist on serverless functions. Set `BETTER_AUTH_SECRET`
+in the project settings; `BETTER_AUTH_URL` should be the public origin.
+Caveat: serverless disks are ephemeral (`DATABASE_PATH` defaults to `/tmp`
+there and auth tables are created on cold start), so sessions and caches can
+vanish when instances recycle — use Docker/Fly/Railway for a persistent home.
+
 ## Scripts
 
 | Script                 | What it does                                                   |
