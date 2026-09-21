@@ -5,11 +5,13 @@ import {
 	encodeCourseId,
 	findHomeRedirect,
 	mergeCookies,
+	parseCourseListPayload,
 	parseMembersPayload,
 	parseProfilesPayload,
 	parseStreamResponse
 } from './classroom-web.ts';
 import { parseCoursesHtml, describeHomeHtml } from './course-discovery.ts';
+import type { Json } from './classroom/proto.ts';
 
 test('merges rotated cookies and drops expired ones', () => {
 	expect(
@@ -309,4 +311,77 @@ test('describeHomeHtml counts signals without leaking page content', () => {
 		idPairs: 0,
 		initData: 0
 	});
+});
+
+const courseRec = (values: Record<number, Json>): Json => {
+	const r: Json[] = new Array(24).fill(null);
+	for (const [i, v] of Object.entries(values)) r[Number(i)] = v;
+	return r;
+};
+
+test('parses the course list payload with sections, rooms and states', () => {
+	const payload = [
+		'hrq.crs',
+		[false],
+		[
+			courseRec({
+				0: ['876371853259'],
+				1: 1787942363020,
+				2: 1789559573290,
+				5: 'Geometry Honors',
+				6: [['33448387591']],
+				8: 'Bromberg',
+				11: 'We meet Fridays',
+				14: '156W',
+				20: 1,
+				23: 'https://calendar.google.com/render?cid=c_abc123@group.calendar.google.com&authuser=0'
+			}),
+			courseRec({ 0: ['774782350284'], 5: 'Old Science', 20: 2 })
+		]
+	];
+	expect(parseCourseListPayload(payload)).toEqual([
+		{
+			id: '876371853259',
+			name: 'Geometry Honors',
+			section: 'Bromberg',
+			descriptionHeading: 'We meet Fridays',
+			room: '156W',
+			ownerId: '33448387591',
+			calendarId: 'c_abc123@group.calendar.google.com',
+			creationTime: new Date(1787942363020).toISOString(),
+			updateTime: new Date(1789559573290).toISOString(),
+			courseState: 'ACTIVE'
+		},
+		{
+			id: '774782350284',
+			name: 'Old Science',
+			section: undefined,
+			descriptionHeading: undefined,
+			room: undefined,
+			ownerId: undefined,
+			calendarId: undefined,
+			creationTime: undefined,
+			updateTime: undefined,
+			courseState: 'ARCHIVED'
+		}
+	]);
+});
+
+test('skips malformed and duplicate list records', () => {
+	expect(
+		parseCourseListPayload([
+			'hrq.crs',
+			[false],
+			[
+				courseRec({ 0: ['876371853259'], 5: 'Kept' }),
+				courseRec({ 0: ['876371853259'], 5: 'Duplicate' }),
+				courseRec({ 0: ['not-an-id'], 5: 'Bad id' }),
+				courseRec({ 0: ['876371853260'], 5: '' }),
+				'garbage',
+				null
+			]
+		]).map((c) => c.name)
+	).toEqual(['Kept']);
+	expect(parseCourseListPayload(['hrq.crs', null, []])).toEqual([]);
+	expect(parseCourseListPayload({})).toEqual([]);
 });

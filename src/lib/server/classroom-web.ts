@@ -237,6 +237,90 @@ export function buildProfileArgs(ids: string[]): string {
 	return `[[null,null,1,0],[1,1,null,1,null,1,null,null,1,1,1,1,null,null,1],[[null,[${list}]]]]`;
 }
 
+// ---- course list (same gXtzob service as members) ---------------------------
+//
+// The home page no longer embeds courses (JS shell since ~2026), so discovery
+// goes through the list query the web app itself boots with: scope [[1]] with
+// course states [1,2,3] instead of scoping to one course id like
+// buildMembersArgs does. Captured 2026-09-21, replayed verbatim — the leading
+// 100 is the page size, so accounts with 100+ courses may need pagination
+// that is not mapped yet. Unlike document fetches this RPC also requires the
+// full browser client-hints headers (callRpc already sends them); without
+// them the server answers 400 with an xsrf complaint.
+const COURSE_LIST_ARGS =
+	'[[100,null,1,0],[1,1,null,null,1,1,null,1,[null,1,1,1,null,1,[1,1,1,0,0,0],null,[1],1,1,1,1,[1,1],[1,0]],1,1,null,null,1,null,null,null,null,null,null,[1,1,1,1,1,1,1],1,null,null,1,null,null,null,[1,1],1,1,null,null,1,1,1,1,null,1,1,[null,null,null,null,1,1,null,null,1,null,null,null,null,null,null,null,null,1,1,1,1,1,1],null,[1,1,1],[1,1,null,1],1,1,1,[[[1,1,1],1],[[[1,1]]],1],null,1,[1,1],null,null,1,null,[null,null,1],1],[[null,[[1]]],null,null,[1,2,3],null,null,[1,2]]]';
+
+export type WebCourseListItem = {
+	id: string;
+	name: string;
+	section?: string;
+	descriptionHeading?: string;
+	room?: string;
+	ownerId?: string;
+	calendarId?: string;
+	creationTime?: string;
+	updateTime?: string;
+	courseState: 'ACTIVE' | 'ARCHIVED';
+};
+
+export async function fetchCourseList(
+	jar: CookieJar,
+	authuser: number,
+	tokens: WebTokens
+): Promise<WebCourseListItem[]> {
+	const payload = await callRpc(
+		jar,
+		authuser,
+		tokens,
+		COURSE_RPC,
+		COURSE_LIST_ARGS,
+		`/u/${authuser}/h`
+	);
+	return parseCourseListPayload(payload);
+}
+
+/**
+ * Parses the `hrq.crs` list payload. Record slots (by index): 0=[id],
+ * 1=created ms, 2=updated ms, 5=name, 6=[[ownerId]], 8=section,
+ * 11=description heading, 14=room, 20=state (1 active, 2 archived),
+ * 23=calendar URL carrying ?cid=. Unknown states default to ACTIVE so new
+ * states stay visible rather than silently dropping courses.
+ */
+export function parseCourseListPayload(payload: Json): WebCourseListItem[] {
+	if (!Array.isArray(payload) || !Array.isArray(payload[2])) return [];
+	const seen = new Set<string>();
+	const out: WebCourseListItem[] = [];
+	for (const record of payload[2]) {
+		if (!Array.isArray(record)) continue;
+		const id = Array.isArray(record[0]) ? String(record[0][0] ?? '') : '';
+		if (!/^\d{9,15}$/.test(id) || seen.has(id)) continue;
+		const name = typeof record[5] === 'string' ? record[5].trim() : '';
+		if (!name) continue;
+		seen.add(id);
+		const owner =
+			Array.isArray(record[6]) && Array.isArray(record[6][0])
+				? String(record[6][0][0] ?? '')
+				: '';
+		const text = (v: unknown) => (typeof v === 'string' && v ? v : undefined);
+		const ms = (v: unknown) =>
+			typeof v === 'number' && Number.isFinite(v) ? new Date(v).toISOString() : undefined;
+		out.push({
+			id,
+			name,
+			section: text(record[8]),
+			descriptionHeading: text(record[11]),
+			room: text(record[14]),
+			ownerId: owner || undefined,
+			calendarId:
+				typeof record[23] === 'string' ? record[23].match(/cid=([^&]+)/)?.[1] : undefined,
+			creationTime: ms(record[1]),
+			updateTime: ms(record[2]),
+			courseState: record[20] === 2 ? 'ARCHIVED' : 'ACTIVE'
+		});
+	}
+	return out;
+}
+
 export const encodeCourseId = (courseId: string) => Buffer.from(courseId).toString('base64');
 
 /**

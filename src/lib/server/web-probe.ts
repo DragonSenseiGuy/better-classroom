@@ -5,6 +5,7 @@
 // before any session exists. Session caching lives in web-session.ts.
 
 import {
+	fetchCourseList,
 	fetchHomeHtml,
 	fetchStreamPage,
 	isSlotExhausted,
@@ -13,7 +14,7 @@ import {
 	type RawCapture,
 	type WebTokens
 } from './classroom-web';
-import { parseCoursesHtml, describeHomeHtml, type HomeDiag } from './course-discovery';
+import { describeHomeHtml, type HomeDiag } from './course-discovery';
 import { errorMessage } from './http';
 import { getProfile, listAll, listByCourse } from './store';
 
@@ -53,7 +54,7 @@ export type SlotProbe = {
 	html?: string;
 	path?: string;
 	diag?: HomeDiag;
-	courseCount?: number;
+	courses?: { id: string; name: string }[];
 	error?: string;
 };
 
@@ -68,7 +69,19 @@ async function listSlots(
 		try {
 			const { html, path } = await fetchHomeHtml(jar, authuser);
 			const tokens = parseTokens(html);
-			slots.push({ authuser, tokens, email: tokens.email, html, path, diag: describeHomeHtml(html) });
+			// The home HTML is a JS shell with no course data; count courses
+			// through the list RPC instead. A list failure still leaves a
+			// signed-in slot — the diag line reports the shape for triage.
+			let courses: { id: string; name: string }[] = [];
+			try {
+				courses = (await fetchCourseList(jar, authuser, tokens)).map(({ id, name }) => ({
+					id,
+					name
+				}));
+			} catch {
+				/* keep the signed-in slot; courses stays empty */
+			}
+			slots.push({ authuser, tokens, email: tokens.email, html, path, diag: describeHomeHtml(html), courses });
 		} catch (err) {
 			slots.push({ authuser, error: errorMessage(err) });
 			if (isSlotExhausted(err)) break;
@@ -78,7 +91,7 @@ async function listSlots(
 }
 
 /**
- * Pure pick: prefer the first slot that actually lists courses. Keeps the
+ * Pure pick: prefer the first slot whose list RPC returned courses. Keeps the
  * network enumeration above separate so this choice is unit-testable.
  */
 export function chooseSlotWithCourses(slots: SlotProbe[]): SlotProbe | undefined {
@@ -86,9 +99,7 @@ export function chooseSlotWithCourses(slots: SlotProbe[]): SlotProbe | undefined
 	for (const slot of slots) {
 		if (slot.error || !slot.tokens) continue;
 		fallback ??= slot;
-		const count = slot.html ? parseCoursesHtml(slot.html).length : 0;
-		slot.courseCount = count;
-		if (count > 0) return slot;
+		if ((slot.courses?.length ?? 0) > 0) return slot;
 	}
 	return fallback;
 }
@@ -109,7 +120,7 @@ export async function probeSessionBase(
 	const { jar, slots } = await listSlots(cookie);
 	const hit = chooseSlotWithCourses(slots);
 	if (hit?.tokens) {
-		const courseCount = hit.courseCount ?? 0;
+		const courseCount = hit.courses?.length ?? 0;
 		if (courseCount > 0)
 			return { ok: true, authuser: hit.authuser, email: hit.email, cookie: jar.cookie, courseCount };
 		const fmt = (s: SlotProbe) => {
@@ -117,7 +128,7 @@ export async function probeSessionBase(
 			const shape = d
 				? `${Math.round(d.bytes / 1024)}KB links:${d.courseLinks} pairs:${d.idPairs} init:${d.initData}`
 				: 'unparsed';
-			return `/u/${s.authuser}/ = ${s.email} (${s.courseCount ?? 0} courses, ${s.path ?? 'unknown path'}, ${shape})`;
+			return `/u/${s.authuser}/ = ${s.email} (${s.courses?.length ?? 0} courses, ${s.path ?? 'unknown path'}, ${shape})`;
 		};
 		const seen = slots.filter((s) => s.email).map(fmt);
 		return {

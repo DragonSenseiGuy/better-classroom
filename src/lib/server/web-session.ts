@@ -12,6 +12,7 @@
 
 import {
 	SessionError,
+	fetchCourseList,
 	fetchCourseMembers,
 	fetchHomeHtml,
 	fetchProfiles,
@@ -137,6 +138,17 @@ export async function sessionTokensWithHtml(
 export async function sessionTokens(session: WebSession, fresh = false): Promise<WebTokens> {
 	const { tokens } = await sessionTokensWithHtml(session, fresh);
 	return tokens;
+}
+
+/**
+ * Canonical course discovery: the gXtzob list query the web app boots with.
+ * The home HTML is a JS shell with no course data, so this (not HTML
+ * scraping) is the primary signal; callers fall back to parseCoursesHtml
+ * only when the RPC itself fails.
+ */
+export async function sessionCourseList(session: WebSession) {
+	const tokens = await sessionTokens(session);
+	return fetchCourseList(sessionJar(session), session.authuser, tokens);
 }
 
 export function ensureRotated(session: WebSession): Promise<void> {

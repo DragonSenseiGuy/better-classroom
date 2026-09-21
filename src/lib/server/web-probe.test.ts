@@ -55,13 +55,16 @@ test('sanitizeProbeAttempts strips raw captures but keeps counts', () => {
 });
 
 test('chooseSlotWithCourses skips a signed-in slot with no courses', () => {
-	const b64 = Buffer.from('123456789012').toString('base64');
-	const withCourses = `<a href="/c/${b64}">Biology 101</a>`;
 	const tokens = (email?: string) => ({ at: 'a', fsid: 'f', bl: 'b', email });
 	expect(
 		chooseSlotWithCourses([
-			{ authuser: 0, tokens: tokens('me@personal.com'), email: 'me@personal.com', html: '<html>no cards</html>' },
-			{ authuser: 1, tokens: tokens('me@school.edu'), email: 'me@school.edu', html: withCourses }
+			{ authuser: 0, tokens: tokens('me@personal.com'), email: 'me@personal.com', courses: [] },
+			{
+				authuser: 1,
+				tokens: tokens('me@school.edu'),
+				email: 'me@school.edu',
+				courses: [{ id: '123456789012', name: 'Biology 101' }]
+			}
 		])?.authuser
 	).toBe(1);
 });
@@ -70,7 +73,7 @@ test('chooseSlotWithCourses falls back to the first signed-in slot when none lis
 	const tokens = { at: 'a', fsid: 'f', bl: 'b', email: 'me@x.com' };
 	expect(
 		chooseSlotWithCourses([
-			{ authuser: 0, tokens, email: 'me@x.com', html: '<html>empty</html>' },
+			{ authuser: 0, tokens, email: 'me@x.com', courses: [] },
 			{ authuser: 1, error: 'nope' }
 		])?.authuser
 	).toBe(0);

@@ -2,8 +2,10 @@
 // deployment, for school accounts where script.google.com is disabled.
 //
 // Coverage (v1):
-// - courses: scraped from the Classroom home page HTML. Section/room are
-//   empty until a HAR capture maps the embedded init-data fields.
+// - courses: the gXtzob list query the web app boots with (id, name,
+//   section, room, owner, calendar, timestamps, active/archived). The home
+//   HTML scrape stays only as a fallback: the page is a JS shell with no
+//   course data, so it yields section/room-empty rows when used.
 // - posts: the stream RPC already used for enrichment. Titles and timestamps
 //   are best-effort; due dates, max points and topics are not mapped yet.
 // - people: members + profiles RPCs, same as enrichment.
@@ -28,6 +30,7 @@ import {
 	findProfileByEmail,
 	iterateCourseStream,
 	requireSession,
+	sessionCourseList,
 	sessionTokensWithHtml,
 	toRawTeacher,
 	withWebStudent
@@ -53,12 +56,17 @@ const TITLE_FALLBACK_LENGTH = 120;
 async function overview(since: number): Promise<RawOverview> {
 	const session = requireSession();
 	const { tokens, html } = await sessionTokensWithHtml(session);
-	const discovered = parseCoursesHtml(html);
+	// Primary signal: the list RPC the web app boots with. The home HTML is
+	// a JS shell with no course data, so it stays only as a fallback for
+	// list-RPC failures (its shapes are a subset of the RPC fields).
+	const listed = await sessionCourseList(session).catch(() => []);
+	type Discovered = WebCourse & Partial<RawCourse> & { courseState?: string };
+	const discovered: Discovered[] = listed.length ? listed : parseCoursesHtml(html);
 	if (discovered.length === 0) {
 		const d = describeHomeHtml(html);
 		throw new SessionError(
 			`Signed in${tokens.email ? ` as ${tokens.email}` : ''} on slot /u/${session.authuser}/, ` +
-				`but no courses were found (${Math.round(d.bytes / 1024)}KB, links:${d.courseLinks} ` +
+				`but no courses were found (list RPC empty; ${Math.round(d.bytes / 1024)}KB, links:${d.courseLinks} ` +
 				`pairs:${d.idPairs} init:${d.initData}). ` +
 				`If that slot is a personal account, reconnect with a cookie from your school account. ` +
 				`If courses are visible there, Google may have changed the page markup — please report this line.`
@@ -78,11 +86,18 @@ async function overview(since: number): Promise<RawOverview> {
 	// fetchManyCoursePeople already ensured every roster profile through the
 	// single writer; resolve the overview identity from the same store read.
 	const profiles = await ensureProfiles(session, []);
-	const courses: RawCourse[] = discovered.map((d: WebCourse) => ({
+	const courses: RawCourse[] = discovered.map((d: Discovered) => ({
 		id: d.id,
 		name: d.name,
-		courseState: 'ACTIVE',
+		section: d.section,
+		descriptionHeading: d.descriptionHeading,
+		room: d.room,
+		ownerId: d.ownerId,
+		courseState: d.courseState ?? 'ACTIVE',
 		alternateLink: courseUrl(d.id),
+		calendarId: d.calendarId,
+		creationTime: d.creationTime,
+		updateTime: d.updateTime,
 		teachers: teachersByCourse.get(d.id)
 	}));
 	const me = tokens.email?.toLowerCase();
