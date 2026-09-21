@@ -1,44 +1,39 @@
 import {
 	SessionError,
-	fetchCourseMembers,
-	fetchProfiles,
-	fetchStreamPage,
-	loadTokens,
 	refreshSession,
-	rotateSession,
 	listComments,
 	querySubmissionAttachments,
 	uploadToDrive,
 	writeAttachments,
 	writeComment,
 	writeSubmissionState,
-	type CookieJar,
 	type WebComment,
-	type RawCapture,
-	type StreamItem,
-	type WebTokens
+	type StreamItem
 } from './classroom-web';
-import { warmAvatars } from './avatars';
+import {
+	ensureProfiles,
+	ensureRotated,
+	fetchCoursePeople,
+	iterateCourseStream,
+	sessionJar,
+	toAuthor,
+	withWebStudent
+} from './web-session';
 import { errorMessage } from './http';
 import {
 	findPost,
 	getKeepAlive,
-	getProfile,
 	getRichStatus,
 	getWebProfiles,
 	getWebSession,
 	listAll,
-	listByCourse,
 	saveKeepAlive,
 	saveRichStatus,
-	saveWebProfiles,
-	saveWebSession,
 	setCourseStudents,
 	setPostExtras,
 	type WebSession
 } from './store';
 import type { Provider, Publish } from './providers';
-import { perUser } from './tenant';
 import type {
 	Author,
 	Change,
@@ -47,68 +42,6 @@ import type {
 	RichStatus,
 	SubmissionFile
 } from '#lib/shared/types.ts';
-
-const PAGE_SIZE = 50;
-const MAX_PAGES = 60;
-const TOKEN_TTL = 20 * 60_000;
-const PROFILE_BATCH = 25;
-
-// One jar per pasted cookie, per user. The keep-alive timer and the sync
-// walk run on their own schedules; separate jars would each write their own
-// copy of the cookie back and could overwrite a freshly rotated
-// device-session token with the value it replaced.
-const local = perUser(() => ({
-	cached: null as { key: string; tokens: WebTokens; at: number } | null,
-	shared: null as { savedAt: number; jar: CookieJar } | null,
-	rotating: null as Promise<void> | null
-}));
-
-function jarFor(session: WebSession): CookieJar {
-	const l = local();
-	if (l.shared?.savedAt !== session.savedAt)
-		l.shared = {
-			savedAt: session.savedAt,
-			jar: {
-				cookie: session.cookie,
-				onChange: (cookie) => saveWebSession({ ...session, cookie })
-			}
-		};
-	return l.shared.jar;
-}
-
-async function tokensFor(session: WebSession, jar: CookieJar, fresh = false) {
-	const l = local();
-	const key = `${session.authuser}:${session.savedAt}`;
-	if (!fresh && l.cached && l.cached.key === key && Date.now() - l.cached.at < TOKEN_TTL)
-		return l.cached.tokens;
-	await rotateIfDue(jar);
-	const tokens = await loadTokens(jar, session.authuser);
-	saveKeepAlive({ ...getKeepAlive(), refreshedAt: Date.now() });
-	l.cached = { key, tokens, at: Date.now() };
-	return tokens;
-}
-
-function rotateIfDue(jar: CookieJar): Promise<void> {
-	const l = local();
-	if (l.rotating) return l.rotating;
-	const state = getKeepAlive();
-	if (Date.now() < (state.nextRotateAt ?? 0)) return Promise.resolve();
-	l.rotating = rotateSession(jar)
-		.then(({ rotated, nextSeconds }) => {
-			saveKeepAlive({
-				...getKeepAlive(),
-				rotatedAt: rotated ? Date.now() : state.rotatedAt,
-				nextRotateAt: Date.now() + nextSeconds * 1000
-			});
-			console.log(
-				`classroom session: ${rotated ? 'rotated device cookies' : 'rotation issued no new cookies'}, next in ${nextSeconds}s`
-			);
-		})
-		.finally(() => {
-			l.rotating = null;
-		});
-	return l.rotating;
-}
 
 /**
  * Periodic keep-alive; the scheduler calls this between syncs. Rotates the
@@ -122,10 +55,9 @@ export async function refreshSavedSession(): Promise<RichStatus | null> {
 	if (previous && !previous.ok && previous.expired && previous.sessionSavedAt === session.savedAt)
 		return previous;
 	try {
-		const jar = jarFor(session);
-		await rotateIfDue(jar);
+		await ensureRotated(session);
 		if (Date.now() - (getKeepAlive().refreshedAt ?? 0) >= 10 * 60_000) {
-			await refreshSession(jar, session.authuser);
+			await refreshSession(sessionJar(session), session.authuser);
 			saveKeepAlive({ ...getKeepAlive(), refreshedAt: Date.now() });
 		}
 		return previous;
@@ -138,28 +70,12 @@ export async function refreshSavedSession(): Promise<RichStatus | null> {
 
 type Ctx = {
 	session: WebSession;
-	jar: CookieJar;
-	tokens: WebTokens;
-	profiles: Record<string, Author>;
 	publish: Publish;
 };
 
-async function resolveAuthors(ctx: Ctx, ids: string[]) {
-	const missing = [...new Set(ids)].filter((id) => !(id in ctx.profiles));
-	for (let i = 0; i < missing.length; i += PROFILE_BATCH) {
-		const batch = missing.slice(i, i + PROFILE_BATCH);
-		const found = await fetchProfiles(ctx.jar, ctx.session.authuser, ctx.tokens, batch);
-		for (const p of found)
-			ctx.profiles[p.id] = { name: p.name, email: p.email, photoUrl: p.photoUrl };
-		for (const id of batch) ctx.profiles[id] ??= {};
-		void warmAvatars(found.map((p) => p.photoUrl));
-	}
-	if (missing.length) saveWebProfiles(ctx.profiles);
-}
-
 async function applyStreamItems(ctx: Ctx, items: StreamItem[]) {
-	await resolveAuthors(
-		ctx,
+	const profiles = await ensureProfiles(
+		ctx.session,
 		items.map((i) => i.creatorId).filter((id): id is string => Boolean(id))
 	);
 	const grouped: Record<string, Change[]> = {};
@@ -167,7 +83,7 @@ async function applyStreamItems(ctx: Ctx, items: StreamItem[]) {
 	for (const item of items) {
 		const found = findPost(item.id);
 		if (!found) continue;
-		const author = item.creatorId ? ctx.profiles[item.creatorId] : undefined;
+		const author = item.creatorId ? profiles[item.creatorId] : undefined;
 		const change = setPostExtras(found.table, found.row, {
 			html: item.html,
 			author: author && author.name ? author : undefined
@@ -182,13 +98,12 @@ async function applyStreamItems(ctx: Ctx, items: StreamItem[]) {
 }
 
 async function syncClassmates(ctx: Ctx, courseId: string) {
-	const members = await fetchCourseMembers(ctx.jar, ctx.session.authuser, ctx.tokens, courseId);
-	await resolveAuthors(ctx, [...members.students, ...members.teachers]);
-	const students = members.students
-		.map((id) => ctx.profiles[id])
-		.filter((p): p is Author => Boolean(p && p.name))
+	// fetchCoursePeople already returns named teachers only; no second filter.
+	const people = await fetchCoursePeople(ctx.session, courseId);
+	const students: Author[] = people.students
+		.map((s) => toAuthor(s))
 		.sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''));
-	const change = setCourseStudents(courseId, students, members.students.length);
+	const change = setCourseStudents(courseId, students, people.students.length);
 	if (change) ctx.publish('courses', [change]);
 	return Boolean(change);
 }
@@ -210,53 +125,15 @@ export async function syncRichText(
 async function walk(session: WebSession, full: boolean, publish: Publish): Promise<RichStatus> {
 	let updated = 0;
 	const errors: string[] = [];
-	const jar = jarFor(session);
-	let tokens: WebTokens;
-	try {
-		tokens = await tokensFor(session, jar);
-	} catch (err) {
-		return failure(err, session);
-	}
-	const ctx: Ctx = { session, jar, tokens, profiles: getWebProfiles(), publish };
+	const ctx: Ctx = { session, publish };
 	const courses = listAll('courses').filter((c) => !c.archived);
 	for (const course of courses) {
-		let token: string | undefined;
-		let page = 0;
 		try {
 			if (full || course.students === undefined) {
 				const changed = await syncClassmates(ctx, course.id);
 				if (changed) updated++;
 			}
-			do {
-				let result;
-				try {
-					result = await fetchStreamPage(
-						jar,
-						session.authuser,
-						ctx.tokens,
-						course.id,
-						PAGE_SIZE,
-						token
-					);
-				} catch (err) {
-					if (err instanceof SessionError && page === 0 && course === courses[0]) {
-						ctx.tokens = await tokensFor(session, jar, true);
-						result = await fetchStreamPage(
-							jar,
-							session.authuser,
-							ctx.tokens,
-							course.id,
-							PAGE_SIZE,
-							token
-						);
-					} else throw err;
-				}
-				const changed = await applyStreamItems(ctx, result.items);
-				updated += changed;
-				token = result.hasMore ? result.token : undefined;
-				page++;
-				if (!full && changed === 0) break;
-			} while (token && page < MAX_PAGES);
+			updated += await syncCourseStream(ctx, course.id, full);
 		} catch (err) {
 			if (err instanceof SessionError) return failure(err, session);
 			errors.push(`${course.name}: ${errorMessage(err)}`);
@@ -268,6 +145,17 @@ async function walk(session: WebSession, full: boolean, publish: Publish): Promi
 		at: Date.now(),
 		updated
 	};
+}
+
+/** Walks one course stream; the session-owned iterator stops at the last page. */
+async function syncCourseStream(ctx: Ctx, courseId: string, full: boolean): Promise<number> {
+	let updated = 0;
+	for await (const result of iterateCourseStream(ctx.session, courseId)) {
+		const changed = await applyStreamItems(ctx, result.items);
+		updated += changed;
+		if (!full && changed === 0) break;
+	}
+	return updated;
 }
 
 function failure(err: unknown, session: WebSession): RichStatus {
@@ -315,7 +203,7 @@ export const webProvider: Provider = {
 };
 
 async function listWebFiles(courseId: string, workId: string): Promise<SubmissionFile[]> {
-	const { session, jar, tokens } = await webContext();
+	const { session, jar, tokens } = await withWebStudent();
 	return querySubmissionAttachments(jar, session.authuser, tokens, workId, courseId);
 }
 
@@ -324,7 +212,7 @@ async function uploadWebFile(
 	workId: string,
 	file: { name: string; type: string; bytes: Uint8Array }
 ): Promise<SubmissionFile[]> {
-	const { session, studentId, jar, tokens } = await webContext();
+	const { session, studentId, jar, tokens } = await withWebStudent();
 	const a = session.authuser;
 	const current = await querySubmissionAttachments(jar, a, tokens, workId, courseId);
 	const { id } = await uploadToDrive(jar, a, file);
@@ -343,7 +231,7 @@ async function removeWebFile(
 	workId: string,
 	driveId: string
 ): Promise<SubmissionFile[]> {
-	const { session, studentId, jar, tokens } = await webContext();
+	const { session, studentId, jar, tokens } = await withWebStudent();
 	const a = session.authuser;
 	const current = await querySubmissionAttachments(jar, a, tokens, workId, courseId);
 	if (!current.some((f) => f.driveId === driveId))
@@ -354,16 +242,6 @@ async function removeWebFile(
 	if (after.some((f) => f.driveId === driveId))
 		throw new Error('Classroom did not remove the file. Unsubmit first if the work is turned in.');
 	return after;
-}
-
-async function webContext() {
-	const session = getWebSession();
-	if (!session) throw new Error('No Classroom session saved.');
-	const studentId = myWebId();
-	if (!studentId) throw new Error('Your Classroom web id is not known yet; run a sync first.');
-	const jar = jarFor(session);
-	const tokens = await tokensFor(session, jar);
-	return { session, studentId, jar, tokens };
 }
 
 function shapeComment(c: WebComment, studentId: string): Comment {
@@ -380,18 +258,17 @@ function shapeComment(c: WebComment, studentId: string): Comment {
 }
 
 async function listWebComments(courseId: string, workId: string): Promise<Comment[]> {
-	const { session, studentId, jar, tokens } = await webContext();
+	const { session, studentId, jar, tokens } = await withWebStudent();
 	const found = await listComments(jar, session.authuser, tokens, studentId, workId, courseId);
-	const missing = found.map((c) => c.authorId).filter((id) => id && !(id in getWebProfiles()));
-	if (missing.length) {
-		const ctx: Ctx = { session, jar, tokens, profiles: getWebProfiles(), publish: () => {} };
-		await resolveAuthors(ctx, missing);
-	}
+	await ensureProfiles(
+		session,
+		found.map((c) => c.authorId).filter((id): id is string => Boolean(id))
+	);
 	return found.map((c) => shapeComment(c, studentId));
 }
 
 async function postWebComment(courseId: string, workId: string, text: string) {
-	const { session, studentId, jar, tokens } = await webContext();
+	const { session, studentId, jar, tokens } = await withWebStudent();
 	const created = await writeComment(
 		'create',
 		jar,
@@ -406,7 +283,7 @@ async function postWebComment(courseId: string, workId: string, text: string) {
 }
 
 async function removeWebComment(courseId: string, workId: string, commentId: string) {
-	const { session, studentId, jar, tokens } = await webContext();
+	const { session, studentId, jar, tokens } = await withWebStudent();
 	await writeComment(
 		'delete',
 		jar,
@@ -420,26 +297,12 @@ async function removeWebComment(courseId: string, workId: string, commentId: str
 	);
 }
 
-/** The signed-in student's web-side id, matched by email among synced profiles. */
-function myWebId(): string | null {
-	const email = getProfile()?.email?.toLowerCase();
-	if (!email) return null;
-	for (const [id, p] of Object.entries(getWebProfiles()))
-		if (p.email?.toLowerCase() === email) return id;
-	return null;
-}
-
 async function submissionAction(
 	action: 'turnIn' | 'reclaim',
 	courseId: string,
 	workId: string
 ): Promise<{ turnedIn: boolean }> {
-	const session = getWebSession();
-	if (!session) throw new Error('No Classroom session saved.');
-	const studentId = myWebId();
-	if (!studentId) throw new Error('Your Classroom web id is not known yet; run a sync first.');
-	const jar = jarFor(session);
-	const tokens = await tokensFor(session, jar);
+	const { session, studentId, jar, tokens } = await withWebStudent();
 	const result = await writeSubmissionState(
 		action,
 		jar,
@@ -450,75 +313,4 @@ async function submissionAction(
 		courseId
 	);
 	return { turnedIn: result.turnedIn };
-}
-
-export type ProbeAttempt = {
-	authuser: number;
-	email?: string;
-	error?: string;
-	courses: { id: string; name: string; items: number; raw?: RawCapture }[];
-};
-
-export type ProbeResult =
-	| { ok: true; authuser: number; sample: number; cookie: string; attempts: ProbeAttempt[] }
-	| { ok: false; message: string; attempts: ProbeAttempt[] };
-
-export async function probeSession(cookie: string): Promise<ProbeResult> {
-	const courses = listAll('courses').filter((c) => !c.archived);
-	const attempts: ProbeAttempt[] = [];
-	if (courses.length === 0)
-		return {
-			ok: false,
-			message: 'Sync your courses first, then add the Classroom session.',
-			attempts
-		};
-	const me = getProfile()?.email?.toLowerCase();
-	const jar: CookieJar = { cookie };
-	const sample = courses
-		.map((c) => ({ c, n: listByCourse('announcements', c.id).length }))
-		.sort((a, b) => b.n - a.n)
-		.slice(0, 3)
-		.map((x) => x.c);
-	for (let authuser = 0; authuser < 5; authuser++) {
-		const attempt: ProbeAttempt = { authuser, courses: [] };
-		attempts.push(attempt);
-		let tokens: WebTokens;
-		try {
-			tokens = await loadTokens(jar, authuser);
-		} catch (err) {
-			attempt.error = errorMessage(err);
-			if (attempt.error.includes('redirected to')) break;
-			continue;
-		}
-		attempt.email = tokens.email;
-		if (me && tokens.email && tokens.email.toLowerCase() !== me) continue;
-		let found = 0;
-		for (const course of sample) {
-			const raw: RawCapture[] = [];
-			try {
-				const page = await fetchStreamPage(jar, authuser, tokens, course.id, 10, undefined, raw);
-				attempt.courses.push({
-					id: course.id,
-					name: course.name,
-					items: page.items.length,
-					raw: raw[0]
-				});
-				found += page.items.length;
-				if (found > 0) break;
-			} catch (err) {
-				attempt.error = errorMessage(err);
-				attempt.courses.push({ id: course.id, name: course.name, items: 0, raw: raw[0] });
-				break;
-			}
-		}
-		if (found > 0) return { ok: true, authuser, sample: found, cookie: jar.cookie, attempts };
-	}
-	const seen = attempts.filter((a) => a.email).map((a) => `/u/${a.authuser}/ = ${a.email}`);
-	return {
-		ok: false,
-		message: me
-			? `None of the signed-in accounts (${seen.join(', ') || 'none found'}) could load posts as ${me}.`
-			: `No signed-in account in that cookie could load posts (${seen.join(', ') || 'none found'}).`,
-		attempts
-	};
 }

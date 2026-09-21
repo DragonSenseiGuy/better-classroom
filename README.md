@@ -38,7 +38,13 @@ Open the app, create an account at `/login`, and you land on `/setup`, which wal
 2. **Deploy it.** Deploy → New deployment → Web app, executing as you, accessible to _Anyone_. Authorize it when asked.
 3. **Connect.** Set a `CLASSROOM_SYNC_KEY` script property, then paste the deployment URL and that key into the app.
 
-The app syncs your courses on an interval from then on. Settings has a second, optional source: paste a Classroom cookie and the app also recovers formatted post text, classmates, comments, attachments, and hand-in, none of which the API exposes.
+No Apps Script on your school account? Below the steps the setup page offers a session fallback instead: paste a Classroom cookie and the app syncs courses and posts through your signed-in session. Grades are unavailable in that mode, and due dates may be missing.
+
+Three ways to connect:
+
+- **Apps Script (records, full grades).** The three steps above; the primary record source.
+- **Session-record (no script, no grades).** The cookie fallback on `/setup`; syncs courses/posts/people without a deployment.
+- **Session-enrichment in Settings.** Adds formatted post text, classmates, comments, attachments, and hand-in onto a script connection (or onto session-record rows); shares the same stored cookie as the record fallback (`/api/session` runs a full record sync, `/api/rich` runs enrichment only).
 
 ## Deploying
 

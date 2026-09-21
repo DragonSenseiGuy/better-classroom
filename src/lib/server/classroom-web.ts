@@ -24,12 +24,34 @@ export type StreamItem = {
 	text: string;
 	html?: string;
 	creatorId?: string;
+	/** Definitive bucket from {@link parsePostMeta}; unknown shapes default to announcement. */
+	kind: StreamKind;
+	title?: string;
+	/**
+	 * Creation timestamp from the PostItem slot. The stream payload exposes
+	 * no reliable update time, so there is deliberately no updatedAt here —
+	 * edits surface on full syncs (and text/author edits via enrichment),
+	 * not on incremental `since` filters.
+	 */
+	createdAt?: number;
 };
 export type StreamPage = { items: StreamItem[]; hasMore: boolean; token?: string };
 
 export type WebProfile = { id: string; name?: string; email?: string; photoUrl?: string };
 
 export class SessionError extends Error {}
+
+export class RedirectError extends SessionError {
+	constructor(
+		message: string,
+		public readonly location: string
+	) {
+		super(message);
+		this.name = 'RedirectError';
+	}
+}
+
+export const isSlotExhausted = (err: unknown): boolean => err instanceof RedirectError;
 
 export type CookieJar = { cookie: string; onChange?: (cookie: string) => void };
 
@@ -113,7 +135,7 @@ const XHR_HEADERS = {
  */
 export async function refreshSession(jar: CookieJar, authuser: number): Promise<boolean> {
 	const before = jar.cookie;
-	await loadTokens(jar, authuser);
+	await fetchHomeHtml(jar, authuser);
 	return jar.cookie !== before;
 }
 
@@ -217,7 +239,12 @@ export function buildProfileArgs(ids: string[]): string {
 
 export const encodeCourseId = (courseId: string) => Buffer.from(courseId).toString('base64');
 
-export async function loadTokens(jar: CookieJar, authuser: number): Promise<WebTokens> {
+/**
+ * Fetches the signed-in Classroom home page and returns its HTML. The page
+ * embeds the course list (AF_initDataCallback payloads), so a cookie-only
+ * record source can discover courses without a separate list RPC.
+ */
+export async function fetchHomeHtml(jar: CookieJar, authuser: number): Promise<string> {
 	const res = await fetch(`${ORIGIN}/u/${authuser}/h`, {
 		headers: { ...DOCUMENT_HEADERS, cookie: jar.cookie },
 		redirect: 'manual',
@@ -228,10 +255,13 @@ export async function loadTokens(jar: CookieJar, authuser: number): Promise<WebT
 		const to = res.headers.get('location') ?? '';
 		if (/accounts\.google\.com/.test(to))
 			throw new SessionError('Google asked for a sign-in when loading the Classroom page.');
-		throw new SessionError(`Classroom redirected to ${to.slice(0, 80)}`);
+		throw new RedirectError(`Classroom redirected to ${to.slice(0, 80)}`, to);
 	}
 	if (!res.ok) throw new SessionError(`Classroom responded ${res.status}`);
-	const html = await res.text();
+	return res.text();
+}
+
+export function parseTokens(html: string): WebTokens {
 	const pick = (key: string) => html.match(new RegExp(`"${key}":"([^"]*)"`))?.[1];
 	const at = pick('SNlM0e');
 	const fsid = pick('FdrFJe');
@@ -290,12 +320,15 @@ async function callRpc(
 	return extractPayload(text, rpc);
 }
 
+export const STREAM_PAGE_SIZE = 50;
+export const STREAM_MAX_PAGES = 60;
+
 export async function fetchStreamPage(
 	jar: CookieJar,
 	authuser: number,
 	tokens: WebTokens,
 	courseId: string,
-	pageSize = 50,
+	pageSize = STREAM_PAGE_SIZE,
 	token?: string,
 	capture?: RawCapture[]
 ): Promise<StreamPage> {
@@ -618,8 +651,14 @@ function parseComment(node: Json): WebComment | null {
 	if (!Array.isArray(head) || head[0] == null) return null;
 	const rich = node.find((v) => Array.isArray(v) && v[0] === 'edu.rt') as Json[] | undefined;
 	const author = Array.isArray(node[4]) ? node[4][0] : undefined;
-	const createdAt = node.slice(1, 4).find((v) => typeof v === 'number' && v > 1e12) as
-		number | undefined;
+	let createdAt: number | undefined;
+	for (const v of node.slice(1, 4)) {
+		const ts = asMsTimestamp(v);
+		if (ts !== undefined) {
+			createdAt = ts;
+			break;
+		}
+	}
 	const box = rich?.[4];
 	return {
 		id: String(head[0]),
@@ -659,13 +698,19 @@ const RPC_STATUS: Record<number, string> = {
 function describeRpcError(entry: Json[]): string {
 	const status = entry[5];
 	const code = Array.isArray(status) && typeof status[0] === 'number' ? status[0] : undefined;
+	const statusMessage =
+		Array.isArray(status) && typeof status[1] === 'string' ? status[1] : undefined;
 	const details = Array.isArray(status) ? status[2] : undefined;
-	const detail =
+	const errorDetail =
 		Array.isArray(details) && Array.isArray(details[0]) && Array.isArray(details[0][1])
 			? details[0][1][1]
 			: undefined;
 	const what = code !== undefined ? RPC_STATUS[code] : undefined;
-	const tail = [code !== undefined && `code ${code}`, detail !== undefined && `detail ${detail}`]
+	const tail = [
+		code !== undefined && `code ${code}`,
+		statusMessage && `status ${statusMessage}`,
+		errorDetail !== undefined && `detail ${errorDetail}`
+	]
 		.filter(Boolean)
 		.join(', ');
 	return what
@@ -698,24 +743,89 @@ export function extractPayload(text: string, rpc: string): Json {
 export const parseStreamResponse = (text: string) =>
 	parseStreamPayload(extractPayload(text, STREAM_RPC));
 
+const ENTRY_ANNOUNCEMENT = 3;
+const ENTRY_WORK_OR_MATERIAL = 2;
+
+// Only two buckets: announcements, and titled wrapper-2 entries as
+// best-effort courseWork. Titled materials share the wrapper-2 shape, and
+// due dates, points and grades live deeper in the payload and are still
+// unmapped — there is deliberately no 'material' kind until a HAR capture
+// distinguishes the two.
+export type StreamKind = 'announcement' | 'courseWork';
+
+const asNonEmptyString = (value: unknown): string | undefined =>
+	typeof value === 'string' && value ? value : undefined;
+
+// Millisecond epoch timestamps are 13 digits; anything smaller is a
+// different slot (counter, type tag), not a creation time.
+export const MIN_MS_EPOCH = 1e12;
+
+export const asMsTimestamp = (value: unknown): number | undefined =>
+	typeof value === 'number' && Number.isFinite(value) && value > MIN_MS_EPOCH ? value : undefined;
+
+/**
+ * Single coercion point for the stream entry wrapper plus the raw PostItem
+ * title/timestamp slots. Announcements arrive as entry `[3, null, [PostItem]]`,
+ * assignments and materials as `[2, [PostItem]]`; only a non-empty string in
+ * the title slot counts as a title (announcements carry an array there).
+ * Wrapper 2 with a title is best-effort courseWork — titled materials share
+ * the shape, and due dates, points and grades live deeper in the payload and
+ * are still unmapped. Anything else defaults to announcement so consumers
+ * never branch on undefined.
+ *
+ * Pure by design: unexpected shapes report through `onFallback` instead of
+ * logging directly, so a large sync emits one summary line per page (see
+ * parseStreamPayload) rather than one line per item.
+ */
+export function parsePostMeta(
+	wrapper: unknown,
+	rawTitle: unknown,
+	rawTimestamp: unknown,
+	onFallback?: (info: { wrapper: unknown; title?: string }) => void
+): { kind: StreamKind; title?: string; createdAt?: number } {
+	const title = asNonEmptyString(rawTitle);
+	const createdAt = asMsTimestamp(rawTimestamp);
+	if (wrapper === ENTRY_ANNOUNCEMENT) return { kind: 'announcement', title, createdAt };
+	if (wrapper === ENTRY_WORK_OR_MATERIAL && title) return { kind: 'courseWork', title, createdAt };
+	// Fallback is deliberately announcement so consumers never branch on
+	// undefined — but it misfiles untitled wrapper-2 entries and unknown
+	// wrappers, so report it: the next HAR capture starts from these lines.
+	onFallback?.({ wrapper, title });
+	return { kind: 'announcement', title, createdAt };
+}
+
 export function parseStreamPayload(payload: Json): StreamPage {
 	const env = decode(payload, StreamEnvelope);
 	if (!env) throw new Error('Classroom stream payload is not a list');
 	const items: StreamItem[] = [];
+	const fallbacks = new Map<string, number>();
 	for (const entry of env.entries ?? []) {
 		const located = findItem(entry as Json);
 		if (!located) continue;
 		const item = decode(located, PostItem);
 		const rich = findRichText(located);
 		if (!item?.key || !rich) continue;
+		const wrapper = Array.isArray(entry) ? entry[0] : undefined;
+		const { kind, title, createdAt } = parsePostMeta(wrapper, item.rawTitle, item.rawTimestamp, (info) => {
+			const key = `wrapper=${JSON.stringify(info.wrapper)}, title=${info.title === undefined ? 'none' : JSON.stringify(info.title)}`;
+			fallbacks.set(key, (fallbacks.get(key) ?? 0) + 1);
+		});
 		items.push({
 			id: item.key.id,
 			courseId: item.key.course?.id ?? '',
 			text: rich.text,
 			html: rich.html,
-			creatorId: item.creator?.id
+			creatorId: item.creator?.id,
+			kind,
+			title,
+			createdAt
 		});
 	}
+	if (fallbacks.size > 0)
+		console.debug(
+			`parseStreamPayload: filed ${[...fallbacks.values()].reduce((a, b) => a + b, 0)} item(s) as announcement: ` +
+				[...fallbacks].map(([shape, n]) => `${n}x (${shape})`).join('; ')
+		);
 	return {
 		items,
 		hasMore: env.paging?.hasMore ?? false,
