@@ -13,6 +13,7 @@ import {
 	type RawCapture,
 	type WebTokens
 } from './classroom-web';
+import { parseCoursesHtml } from './course-discovery';
 import { errorMessage } from './http';
 import { getProfile, listAll, listByCourse } from './store';
 
@@ -49,6 +50,8 @@ export type SlotProbe = {
 	authuser: number;
 	tokens?: WebTokens;
 	email?: string;
+	html?: string;
+	courseCount?: number;
 	error?: string;
 };
 
@@ -61,8 +64,9 @@ async function listSlots(
 	const slots: SlotProbe[] = [];
 	for (let authuser = 0; authuser < maxSlots; authuser++) {
 		try {
-			const tokens = parseTokens(await fetchHomeHtml(jar, authuser));
-			slots.push({ authuser, tokens, email: tokens.email });
+			const html = await fetchHomeHtml(jar, authuser);
+			const tokens = parseTokens(html);
+			slots.push({ authuser, tokens, email: tokens.email, html });
 		} catch (err) {
 			slots.push({ authuser, error: errorMessage(err) });
 			if (isSlotExhausted(err)) break;
@@ -72,18 +76,53 @@ async function listSlots(
 }
 
 /**
+ * Pure pick: prefer the first slot that actually lists courses. Keeps the
+ * network enumeration above separate so this choice is unit-testable.
+ */
+export function chooseSlotWithCourses(slots: SlotProbe[]): SlotProbe | undefined {
+	let fallback: SlotProbe | undefined;
+	for (const slot of slots) {
+		if (slot.error || !slot.tokens) continue;
+		fallback ??= slot;
+		const count = slot.html ? parseCoursesHtml(slot.html).length : 0;
+		slot.courseCount = count;
+		if (count > 0) return slot;
+	}
+	return fallback;
+}
+
+/**
  * Setup-path probe: verifies a pasted cookie loads Classroom without needing
- * synced courses. Tries account slots and keeps the first that works.
+ * synced courses. Tries account slots and keeps the first that lists courses
+ * (not just the first signed-in slot: with multi-login the personal /u/0
+ * slot usually signs in fine but holds no courses, which used to surface
+ * later as "no courses were found on the Classroom home page").
  */
 export async function probeSessionBase(
 	cookie: string
 ): Promise<
-	| { ok: true; authuser: number; email?: string; cookie: string; code?: undefined }
+	| { ok: true; authuser: number; email?: string; cookie: string; courseCount: number; code?: undefined }
 	| { ok: false; message: string; code: string }
 > {
 	const { jar, slots } = await listSlots(cookie);
-	const hit = slots.find((s) => !s.error);
-	if (hit) return { ok: true, authuser: hit.authuser, email: hit.email, cookie: jar.cookie };
+	const hit = chooseSlotWithCourses(slots);
+	if (hit?.tokens) {
+		const courseCount = hit.courseCount ?? 0;
+		if (courseCount > 0)
+			return { ok: true, authuser: hit.authuser, email: hit.email, cookie: jar.cookie, courseCount };
+		const seen = slots
+			.filter((s) => s.email)
+			.map((s) => `/u/${s.authuser}/ = ${s.email} (${s.courseCount ?? 0} courses)`);
+		return {
+			ok: false,
+			code: 'cookie',
+			message:
+				`Signed in${hit.email ? ` as ${hit.email}` : ''}, but no courses were found on the Classroom ` +
+				`home page (checked ${seen.join(', ') || 'no signed-in slots'}). ` +
+				`If your courses live on a school account, paste a cookie from a window signed in ` +
+				`with only that account, or report the page markup if courses are visible there.`
+		};
+	}
 	return {
 		ok: false,
 		code: 'cookie',
