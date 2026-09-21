@@ -3,6 +3,7 @@ import {
 	buildProfileArgs,
 	buildStreamArgs,
 	encodeCourseId,
+	findHomeRedirect,
 	mergeCookies,
 	parseMembersPayload,
 	parseProfilesPayload,
@@ -258,4 +259,24 @@ test('array in the title slot is not mistaken for a title', () => {
 			createdAt: 1789395973678
 		}
 	]);
+});
+
+test('finds client-side hops out of the home shell page', () => {
+	expect(findHomeRedirect('<html><body>courses here</body></html>')).toBeNull();
+	expect(
+		findHomeRedirect('<meta http-equiv="refresh" content="0;url=/u/0/h/st">')
+	).toBe('/u/0/h/st');
+	expect(findHomeRedirect('<script>location.replace("/u/0/h/st")</script>')).toBe('/u/0/h/st');
+	expect(findHomeRedirect('<script>window.location="/u/2/h/st?hl=en"</script>')).toBe(
+		'/u/2/h/st?hl=en'
+	);
+	expect(findHomeRedirect('<script>AF_initDataCallback("redirectUrl":"\\/u\\/0\\/h\\/st")</script>')).toBe(
+		'/u/0/h/st'
+	);
+});
+
+test('ignores off-origin and off-classroom redirect targets', () => {
+	expect(findHomeRedirect('<script>location.replace("https://accounts.google.com/x")</script>')).toBeNull();
+	expect(findHomeRedirect('<script>location.replace("https://evil.com/u/0/h")</script>')).toBeNull();
+	expect(findHomeRedirect('<script>location.replace("/u/0/r/xyz")</script>')).toBeNull();
 });

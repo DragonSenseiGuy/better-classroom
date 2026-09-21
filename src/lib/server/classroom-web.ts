@@ -243,22 +243,84 @@ export const encodeCourseId = (courseId: string) => Buffer.from(courseId).toStri
  * Fetches the signed-in Classroom home page and returns its HTML. The page
  * embeds the course list (AF_initDataCallback payloads), so a cookie-only
  * record source can discover courses without a separate list RPC.
+ *
+ * Follows Classroom-internal redirects like a browser: /h currently bounces
+ * to a role-specific sub-page (observed /u/0/h/st), sometimes via HTTP 3xx
+ * and sometimes via a client-side hop (meta refresh / location.replace) on
+ * an HTTP-200 shell that already carries sign-in tokens but no course cards.
+ * Stopping at the shell is what produced "signed in but no courses found".
  */
 export async function fetchHomeHtml(jar: CookieJar, authuser: number): Promise<string> {
-	const res = await fetch(`${ORIGIN}/u/${authuser}/h`, {
-		headers: { ...DOCUMENT_HEADERS, cookie: jar.cookie },
-		redirect: 'manual',
-		signal: AbortSignal.timeout(30_000)
-	});
-	absorb(jar, res);
-	if (res.status >= 300 && res.status < 400) {
-		const to = res.headers.get('location') ?? '';
-		if (/accounts\.google\.com/.test(to))
-			throw new SessionError('Google asked for a sign-in when loading the Classroom page.');
-		throw new RedirectError(`Classroom redirected to ${to.slice(0, 80)}`, to);
+	let path = `/u/${authuser}/h`;
+	for (let hop = 0; hop < MAX_HOME_HOPS; hop++) {
+		const res = await fetch(`${ORIGIN}${path}`, {
+			headers: { ...DOCUMENT_HEADERS, cookie: jar.cookie },
+			redirect: 'manual',
+			signal: AbortSignal.timeout(30_000)
+		});
+		absorb(jar, res);
+		if (res.status >= 300 && res.status < 400) {
+			const to = res.headers.get('location') ?? '';
+			if (/accounts\.google\.com/.test(to))
+				throw new SessionError('Google asked for a sign-in when loading the Classroom page.');
+			const next = sameOriginClassroom(to);
+			if (!next) throw new RedirectError(`Classroom redirected to ${to.slice(0, 80)}`, to);
+			path = next;
+			continue;
+		}
+		if (!res.ok) throw new SessionError(`Classroom responded ${res.status}`);
+		const html = await res.text();
+		const next = findHomeRedirect(html);
+		if (next && next !== path) {
+			path = next;
+			continue;
+		}
+		return html;
 	}
-	if (!res.ok) throw new SessionError(`Classroom responded ${res.status}`);
-	return res.text();
+	throw new SessionError('Classroom kept redirecting the home page; please report it.');
+}
+
+const MAX_HOME_HOPS = 5;
+
+/** Same-origin Classroom home path for a redirect target, or null to not follow. */
+function sameOriginClassroom(to: string): string | null {
+	try {
+		const url = new URL(to, ORIGIN);
+		if (url.origin !== ORIGIN) return null;
+		// Only home pages: a hop to a course/rpc path is not the course list.
+		if (!/^\/u\/\d+\/h(\/|$)/.test(url.pathname) && url.pathname !== '/h') return null;
+		return url.pathname + url.search;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Client-side hop out of an HTTP-200 shell page: meta refresh,
+ * location.replace/assign/href, or an embedded redirectUrl. Pure so the
+ * redirect patterns are unit-testable; only same-origin Classroom paths are
+ * ever returned.
+ */
+export function findHomeRedirect(html: string): string | null {
+	const meta = html.match(
+		/<meta[^>]+http-equiv=["']?refresh["']?[^>]*content=["']?\d+\s*;\s*url=([^"'\s>]+)/i
+	)?.[1];
+	if (meta) {
+		const next = sameOriginClassroom(meta.trim());
+		if (next) return next;
+	}
+	const js =
+		html.match(
+			/(?:location\.replace|location\.assign|location\.href\s*=|window\.location\s*=)\s*\(\s*["']([^"']+)["']/
+		)?.[1] ??
+		html.match(/(?:location\.href|window\.location)\s*=\s*["']([^"']+)["']/)?.[1] ??
+		html.match(/"redirectUrl"\s*:\s*"([^"]+)"/)?.[1];
+	if (js) {
+		// Embedded URLs escape slashes as \/ — unescape before parsing.
+		const next = sameOriginClassroom(js.replace(/\\\//g, '/'));
+		if (next) return next;
+	}
+	return null;
 }
 
 export function parseTokens(html: string): WebTokens {
