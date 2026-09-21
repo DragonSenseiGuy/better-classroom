@@ -13,7 +13,7 @@ import {
 	type RawCapture,
 	type WebTokens
 } from './classroom-web';
-import { parseCoursesHtml } from './course-discovery';
+import { parseCoursesHtml, describeHomeHtml, type HomeDiag } from './course-discovery';
 import { errorMessage } from './http';
 import { getProfile, listAll, listByCourse } from './store';
 
@@ -51,6 +51,8 @@ export type SlotProbe = {
 	tokens?: WebTokens;
 	email?: string;
 	html?: string;
+	path?: string;
+	diag?: HomeDiag;
 	courseCount?: number;
 	error?: string;
 };
@@ -64,9 +66,9 @@ async function listSlots(
 	const slots: SlotProbe[] = [];
 	for (let authuser = 0; authuser < maxSlots; authuser++) {
 		try {
-			const html = await fetchHomeHtml(jar, authuser);
+			const { html, path } = await fetchHomeHtml(jar, authuser);
 			const tokens = parseTokens(html);
-			slots.push({ authuser, tokens, email: tokens.email, html });
+			slots.push({ authuser, tokens, email: tokens.email, html, path, diag: describeHomeHtml(html) });
 		} catch (err) {
 			slots.push({ authuser, error: errorMessage(err) });
 			if (isSlotExhausted(err)) break;
@@ -110,9 +112,14 @@ export async function probeSessionBase(
 		const courseCount = hit.courseCount ?? 0;
 		if (courseCount > 0)
 			return { ok: true, authuser: hit.authuser, email: hit.email, cookie: jar.cookie, courseCount };
-		const seen = slots
-			.filter((s) => s.email)
-			.map((s) => `/u/${s.authuser}/ = ${s.email} (${s.courseCount ?? 0} courses)`);
+		const fmt = (s: SlotProbe) => {
+			const d = s.diag;
+			const shape = d
+				? `${Math.round(d.bytes / 1024)}KB links:${d.courseLinks} pairs:${d.idPairs} init:${d.initData}`
+				: 'unparsed';
+			return `/u/${s.authuser}/ = ${s.email} (${s.courseCount ?? 0} courses, ${s.path ?? 'unknown path'}, ${shape})`;
+		};
+		const seen = slots.filter((s) => s.email).map(fmt);
 		return {
 			ok: false,
 			code: 'cookie',
@@ -120,7 +127,7 @@ export async function probeSessionBase(
 				`Signed in${hit.email ? ` as ${hit.email}` : ''}, but no courses were found on the Classroom ` +
 				`home page (checked ${seen.join(', ') || 'no signed-in slots'}). ` +
 				`If your courses live on a school account, paste a cookie from a window signed in ` +
-				`with only that account, or report the page markup if courses are visible there.`
+				`with only that account, or report this line if courses are visible there.`
 		};
 	}
 	return {

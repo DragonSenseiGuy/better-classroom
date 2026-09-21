@@ -9,7 +9,7 @@ import {
 	parseProfilesPayload,
 	parseStreamResponse
 } from './classroom-web.ts';
-import { parseCoursesHtml } from './course-discovery.ts';
+import { parseCoursesHtml, describeHomeHtml } from './course-discovery.ts';
 
 test('merges rotated cookies and drops expired ones', () => {
 	expect(
@@ -279,4 +279,34 @@ test('ignores off-origin and off-classroom redirect targets', () => {
 	expect(findHomeRedirect('<script>location.replace("https://accounts.google.com/x")</script>')).toBeNull();
 	expect(findHomeRedirect('<script>location.replace("https://evil.com/u/0/h")</script>')).toBeNull();
 	expect(findHomeRedirect('<script>location.replace("/u/0/r/xyz")</script>')).toBeNull();
+});
+
+test('accepts spaced id/name pairs', () => {
+	const html =
+		`<a href="/c/${b64('123456789012')}">Physics</a>` +
+		`["888888888888" , "Spaced Out"]` +
+		`[ "777777777777" , "Extra Spaces" ]`;
+	expect(parseCoursesHtml(html).map((c) => c.name).sort()).toEqual([
+		'Extra Spaces',
+		'Physics',
+		'Spaced Out'
+	]);
+});
+
+test('describeHomeHtml counts signals without leaking page content', () => {
+	const b64 = Buffer.from('123456789012').toString('base64');
+	const html =
+		`<a href="/c/${b64}">Bio</a>["123456789012","Bio"]AF_initDataCallbackAF_initDataCallback`;
+	const diag = describeHomeHtml(html);
+	expect(diag.bytes).toBe(html.length);
+	expect(diag.courseLinks).toBe(1);
+	expect(diag.idPairs).toBe(1);
+	expect(diag.initData).toBe(2);
+	expect(JSON.stringify(diag)).not.toContain('Bio');
+	expect(describeHomeHtml('<html>shell</html>')).toEqual({
+		bytes: 18,
+		courseLinks: 0,
+		idPairs: 0,
+		initData: 0
+	});
 });

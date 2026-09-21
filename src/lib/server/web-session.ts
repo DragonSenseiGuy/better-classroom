@@ -127,7 +127,7 @@ export async function sessionTokensWithHtml(
 		return { tokens: l.cached.tokens, html: l.cached.html };
 	}
 	await ensureRotated(session);
-	const html = await fetchHomeHtml(sessionJar(session), session.authuser);
+	const { html } = await fetchHomeHtml(sessionJar(session), session.authuser);
 	const tokens = parseTokens(html);
 	saveKeepAlive({ ...getKeepAlive(), refreshedAt: Date.now() });
 	l.cached = { key, tokens, html, at: Date.now() };

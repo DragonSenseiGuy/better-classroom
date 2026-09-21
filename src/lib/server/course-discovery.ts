@@ -33,8 +33,9 @@ export function parseCoursesHtml(html: string): WebCourse[] {
 	// rejects nav links (/settings, /calendar) without a denylist. Inner
 	// markup is stripped so cards rendering <a><span>Name</span></a> match
 	// as well as plain-text links; the pair scan below stays the fallback
-	// for markup variations.
-	const link = /\/c\/([A-Za-z0-9\-_]+={0,2})"[^>]*>([\s\S]{1,2000}?)<\/a>/g;
+	// for markup variations. Both base64 alphabets are accepted: Classroom
+	// has been seen emitting standard (+/) as well as URL-safe (-_) ids.
+	const link = /\/c\/([A-Za-z0-9\-_+/]+={0,2})"[^>]*>([\s\S]{1,2000}?)<\/a>/g;
 	let m: RegExpExecArray | null;
 	while ((m = link.exec(html))) {
 		// Cards may pack description/meta text after the name inside the
@@ -46,7 +47,8 @@ export function parseCoursesHtml(html: string): WebCourse[] {
 	}
 	// Secondary signal: embedded id/name pairs. Always unioned with the link
 	// results so a partial link parse never drops courses the pairs saw.
-	const pair = /\["(\d{9,15})","([^"]{2,160})"/g;
+	// Whitespace-tolerant: payloads vary between compact and spaced JSON.
+	const pair = /\[\s*"(\d{9,15})"\s*,\s*"([^"]{2,160})"/g;
 	while ((m = pair.exec(html))) {
 		add(m[1], m[2], false);
 	}
@@ -84,3 +86,26 @@ function decodeCourseId(b64: string): string | null {
 // cards change shape, extend the link pattern (with a fixture case) instead.
 const looksLikeNoise = (name: string) =>
 	name.length < 2 || /^https?:\/\//.test(name) || /\S+@\S+\.\S+/.test(name);
+
+export type HomeDiag = {
+	bytes: number;
+	courseLinks: number;
+	idPairs: number;
+	initData: number;
+};
+
+/**
+ * PII-free shape summary of a home page: raw signal counts only, never
+ * names, ids, or emails. Surfaced in zero-course errors so a report tells
+ * apart "empty shell page" (all zeros) from "cards present but unparsed"
+ * (nonzero signals, zero courses) without anyone pasting page HTML.
+ */
+export function describeHomeHtml(html: string): HomeDiag {
+	const count = (re: RegExp) => html.match(re)?.length ?? 0;
+	return {
+		bytes: html.length,
+		courseLinks: count(/\/c\/[A-Za-z0-9\-_+/]+={0,2}"/g),
+		idPairs: count(/\[\s*"\d{9,15}"\s*,\s*"/g),
+		initData: count(/AF_initDataCallback/g)
+	};
+}

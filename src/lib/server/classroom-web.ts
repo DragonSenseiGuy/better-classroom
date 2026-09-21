@@ -250,7 +250,10 @@ export const encodeCourseId = (courseId: string) => Buffer.from(courseId).toStri
  * an HTTP-200 shell that already carries sign-in tokens but no course cards.
  * Stopping at the shell is what produced "signed in but no courses found".
  */
-export async function fetchHomeHtml(jar: CookieJar, authuser: number): Promise<string> {
+export async function fetchHomeHtml(
+	jar: CookieJar,
+	authuser: number
+): Promise<{ html: string; path: string }> {
 	let path = `/u/${authuser}/h`;
 	for (let hop = 0; hop < MAX_HOME_HOPS; hop++) {
 		const res = await fetch(`${ORIGIN}${path}`, {
@@ -275,7 +278,7 @@ export async function fetchHomeHtml(jar: CookieJar, authuser: number): Promise<s
 			path = next;
 			continue;
 		}
-		return html;
+		return { html, path };
 	}
 	throw new SessionError('Classroom kept redirecting the home page; please report it.');
 }

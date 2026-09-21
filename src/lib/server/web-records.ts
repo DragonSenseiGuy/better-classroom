@@ -20,7 +20,7 @@ import {
 	writeSubmissionState,
 	type StreamItem
 } from './classroom-web';
-import { parseCoursesHtml, type WebCourse } from './course-discovery';
+import { parseCoursesHtml, describeHomeHtml, type WebCourse } from './course-discovery';
 import {
 	ensureProfiles,
 	fetchCoursePeople,
@@ -54,13 +54,16 @@ async function overview(since: number): Promise<RawOverview> {
 	const session = requireSession();
 	const { tokens, html } = await sessionTokensWithHtml(session);
 	const discovered = parseCoursesHtml(html);
-	if (discovered.length === 0)
+	if (discovered.length === 0) {
+		const d = describeHomeHtml(html);
 		throw new SessionError(
 			`Signed in${tokens.email ? ` as ${tokens.email}` : ''} on slot /u/${session.authuser}/, ` +
-				`but no courses were found in ${html.length} bytes of Classroom home HTML. ` +
+				`but no courses were found (${Math.round(d.bytes / 1024)}KB, links:${d.courseLinks} ` +
+				`pairs:${d.idPairs} init:${d.initData}). ` +
 				`If that slot is a personal account, reconnect with a cookie from your school account. ` +
-				`If courses are visible there, Google may have changed the page markup — please report it.`
+				`If courses are visible there, Google may have changed the page markup — please report this line.`
 		);
+	}
 	// Like the Apps Script source, incremental syncs skip member resolution:
 	// rosters rarely change, and the store preserves previous teachers.
 	// Newly discovered courses always resolve teachers — there is nothing
