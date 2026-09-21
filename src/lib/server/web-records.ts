@@ -56,8 +56,10 @@ async function overview(since: number): Promise<RawOverview> {
 	const discovered = parseCoursesHtml(html);
 	if (discovered.length === 0)
 		throw new SessionError(
-			'Signed in, but no courses were found on the Classroom home page. ' +
-				'If you have courses, Google may have changed the page markup — please report it.'
+			`Signed in${tokens.email ? ` as ${tokens.email}` : ''} on slot /u/${session.authuser}/, ` +
+				`but no courses were found in ${html.length} bytes of Classroom home HTML. ` +
+				`If that slot is a personal account, reconnect with a cookie from your school account. ` +
+				`If courses are visible there, Google may have changed the page markup — please report it.`
 		);
 	// Like the Apps Script source, incremental syncs skip member resolution:
 	// rosters rarely change, and the store preserves previous teachers.
