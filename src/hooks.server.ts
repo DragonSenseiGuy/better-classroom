@@ -15,6 +15,7 @@ import {
 import { auth } from '#lib/server/auth.ts';
 import { configure, registerSourceCheck } from '#lib/server/config.ts';
 import { appsScriptProvider } from '#lib/server/apps-script.ts';
+import { webRecordsProvider } from '#lib/server/web-records.ts';
 import { webProvider } from '#lib/server/rich.ts';
 import { hasRecordSource, registerProviders } from '#lib/server/providers.ts';
 import { configurePush } from '#lib/server/push.ts';
@@ -36,7 +37,7 @@ export const init: ServerInit = async () => {
 		privateKey: VAPID_PRIVATE_KEY,
 		subject: VAPID_SUBJECT
 	});
-	registerProviders(appsScriptProvider, webProvider);
+	registerProviders(appsScriptProvider, webRecordsProvider, webProvider);
 	registerSourceCheck(hasRecordSource);
 	if (process.env.VERCEL && !building) {
 		// Serverless instances start from a blank ephemeral disk, so there is no

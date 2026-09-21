@@ -104,7 +104,7 @@ export type Comment = {
 
 export type SubmissionFile = { driveId: string; title?: string; mime: string; url?: string };
 
-export type ProviderId = 'apps-script' | 'web';
+export type ProviderId = 'apps-script' | 'web' | 'web-records';
 export type ProviderRole = 'records' | 'enrichment';
 export type ProviderState = 'off' | 'ready' | 'expired' | 'error';
 export type ProviderStatus = {

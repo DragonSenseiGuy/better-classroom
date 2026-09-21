@@ -8,6 +8,7 @@ import {
 	parseProfilesPayload,
 	parseStreamResponse
 } from './classroom-web.ts';
+import { parseCoursesHtml } from './course-discovery.ts';
 
 test('merges rotated cookies and drops expired ones', () => {
 	expect(
@@ -128,14 +129,33 @@ test('parses items, html and pagination', () => {
 		hasMore: true,
 		token: 'EhIS',
 		items: [
-			{ id: '1', courseId: '9', text: 'Plain', html: '<div>Plain</div>', creatorId: undefined },
-			{ id: '2', courseId: '9', text: 'No html', html: undefined, creatorId: undefined },
+			{
+				id: '1',
+				courseId: '9',
+				text: 'Plain',
+				html: '<div>Plain</div>',
+				creatorId: undefined,
+				kind: 'announcement',
+				createdAt: 1789395973678
+			},
+			{
+				id: '2',
+				courseId: '9',
+				text: 'No html',
+				html: undefined,
+				creatorId: undefined,
+				kind: 'announcement',
+				createdAt: 1789395973678
+			},
 			{
 				id: '3',
 				courseId: '9',
 				text: 'Work',
 				html: '<div><b>Work</b></div>',
-				creatorId: '638776461164'
+				creatorId: '638776461164',
+				kind: 'courseWork',
+				title: 'Title',
+				createdAt: 1784283111869
 			}
 		]
 	});
@@ -154,4 +174,88 @@ test('rpc error surfaces', () => {
 		['wrb.fr', 'pONvgf', null, null, null, [3, 'PERMISSION_DENIED'], 'generic']
 	]);
 	expect(() => parseStreamResponse(`)]}'\n\n1\n${line}\n`)).toThrow(/PERMISSION_DENIED/);
+});
+
+const b64 = (id: string) => Buffer.from(id).toString('base64');
+
+test('finds courses from card links', () => {
+	const html = `
+		<a href="/c/${b64('123456789012')}">Biology 101</a>
+		<a href="/c/${b64('987654321098')}">Algebra II</a>
+		<a href="/settings">Settings</a>`;
+	expect(parseCoursesHtml(html)).toEqual([
+		{ id: '123456789012', name: 'Biology 101' },
+		{ id: '987654321098', name: 'Algebra II' }
+	]);
+});
+
+test('falls back to id/name pairs and skips noise', () => {
+	const html = `["123456789012","Chemistry",["dg@example.com"],["home"]]`;
+	expect(parseCoursesHtml(html)).toEqual([{ id: '123456789012', name: 'Chemistry' }]);
+});
+
+test('unions card links and embedded pairs', () => {
+	const html = `<a href="/c/${b64('111111111111')}">From Link</a>["222222222222","From Pair"]`;
+	expect(parseCoursesHtml(html)).toEqual([
+		{ id: '111111111111', name: 'From Link' },
+		{ id: '222222222222', name: 'From Pair' }
+	]);
+});
+
+test('empty page finds nothing', () => {
+	expect(parseCoursesHtml('<html><body>signed out</body></html>')).toEqual([]);
+});
+
+test('decodes entities and numeric refs in course names', () => {
+	const html = `<a href="/c/${b64('123456789012')}">Biology &amp; Chemistry &#39;25</a>`;
+	expect(parseCoursesHtml(html)).toEqual([{ id: '123456789012', name: "Biology & Chemistry '25" }]);
+});
+
+test('finds course names wrapped in nested card markup', () => {
+	const html = `<a href="/c/${b64('123456789012')}"><span><div>Biology 101</div></span></a>`;
+	expect(parseCoursesHtml(html)).toEqual([{ id: '123456789012', name: 'Biology 101' }]);
+});
+
+test('skips card links whose inner text is polluted with extra content', () => {
+	const longInner = `Course Name ${'filler '.repeat(40)}`;
+	const html =
+		`<a href="/c/${b64('123456789012')}"><span>${longInner}</span></a>` +
+		`["123456789012","Biology 101"]`;
+	expect(parseCoursesHtml(html)).toEqual([{ id: '123456789012', name: 'Biology 101' }]);
+});
+
+test('array in the title slot is not mistaken for a title', () => {
+	const text = envelope([
+		'hrsi.qr',
+		[false],
+		[
+			[
+				3,
+				null,
+				[
+					[
+						['9', ['42']],
+						1789395973678,
+						null,
+						null,
+						null,
+						[['nested', 'array']],
+						['edu.rt', 'Hello', null, null, [null, '<div>Hello</div>']]
+					]
+				]
+			]
+		]
+	]);
+	expect(parseStreamResponse(text).items).toEqual([
+		{
+			id: '9',
+			courseId: '42',
+			text: 'Hello',
+			html: '<div>Hello</div>',
+			creatorId: undefined,
+			kind: 'announcement',
+			title: undefined,
+			createdAt: 1789395973678
+		}
+	]);
 });

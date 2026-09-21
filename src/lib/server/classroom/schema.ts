@@ -48,13 +48,22 @@ export const StreamEnvelope = message<{
  * and materials as `[2, [PostItem]]`; the kind wrapper is stripped by findItem
  * before decoding. Rich text sits several levels deep in field 28 and stays a
  * hand-walked locator (findRichText) because its position varies by post type.
+ * Field 6 holds the title on coursework/materials; on announcements the same
+ * slot carries a content array, and field 2 holds a millisecond timestamp.
+ * Both stay `unknown` at the wire boundary because the proto decoder cannot
+ * distinguish "string title" from "array content" — `parsePostMeta` in
+ * classroom-web.ts is the single place that coerces them to clean types.
  */
 export const PostItem = message<{
 	key: { id: string; course: { id: string } };
 	creator: { id: string };
+	rawTimestamp: unknown;
+	rawTitle: unknown;
 }>('PostItem', {
 	1: f('key', PostKey),
-	5: f('creator', IdBox, 'author user id, web-side namespace (12 digits)')
+	2: f('rawTimestamp', 'json', 'millisecond timestamp on observed traffic'),
+	5: f('creator', IdBox, 'author user id, web-side namespace (12 digits)'),
+	6: f('rawTitle', 'json', 'string title on work/materials, array on announcements')
 });
 
 // ---- profiles (rpc UG41I, tag hrq.usr) ----------------------------------

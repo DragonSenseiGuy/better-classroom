@@ -3,6 +3,7 @@
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Input } from '#lib/components/ui/input/index.js';
 	import CopyBlock from './copy-block.svelte';
+	import SessionForm from './session-form.svelte';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
 	import ArrowRightIcon from '@lucide/svelte/icons/arrow-right';
@@ -22,10 +23,18 @@
 	let step = $state(0);
 	let key = $state('');
 	let url = $state('');
-	let testing = $state(false);
+	// Independent flags so each connect button spins/disables on its own
+	// request; the two endpoints are independent and either may be retried
+	// while the other is in flight.
+	let scriptPending = $state(false);
+	let sessionPending = $state(false);
+	let useSession = $state(false);
+	let cookie = $state('');
+	let scriptError = $state<{ code: string; message: string } | null>(null);
+	let sessionError = $state<{ code: string; message: string } | null>(null);
 	let result = $state<
-		| { ok: true; name?: string; email?: string; courseCount: number }
-		| { ok: false; code: string; message: string }
+		| { ok: true; kind: 'script'; name?: string; email?: string; courseCount: number }
+		| { ok: true; kind: 'session'; email?: string }
 		| null
 	>(null);
 	let done = $state(false);
@@ -60,27 +69,79 @@
 
 	const fixStep: Record<string, number> = { key: 0, manifest: 0, url: 1, access: 1 };
 
-	async function connect() {
-		testing = true;
-		result = null;
+	async function postJson<T>(path: string, body: unknown): Promise<T> {
+		const res = await fetch(path, {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify(body)
+		});
+		return (await res.json()) as T;
+	}
+
+	function finishOk() {
+		done = true;
 		try {
-			const res = await fetch('/api/config', {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ url, key })
-			});
-			result = await res.json();
-			if (result?.ok) {
-				done = true;
-				try {
-					localStorage.removeItem(STORAGE);
-				} catch {}
-			}
+			localStorage.removeItem(STORAGE);
+		} catch {}
+	}
+
+	type ConfigResponse =
+		| { ok: true; name?: string; email?: string; courseCount: number }
+		| { ok: false; code: string; message: string };
+	type SessionResponse =
+		{ ok: true; email?: string } | { ok: false; code: string; message: string };
+
+	type ConnectKind = 'script' | 'session';
+
+	async function runConnect(kind: ConnectKind, fn: () => Promise<void>) {
+		if (kind === 'script') scriptPending = true;
+		else sessionPending = true;
+		if (kind === 'script') scriptError = null;
+		else sessionError = null;
+		try {
+			await fn();
 		} catch (err) {
-			result = { ok: false, code: 'network', message: String(err) };
+			const failure = { code: 'network', message: String(err) };
+			if (kind === 'script') scriptError = failure;
+			else sessionError = failure;
 		} finally {
-			testing = false;
+			if (kind === 'script') scriptPending = false;
+			else sessionPending = false;
 		}
+	}
+
+	async function connectScript() {
+		await runConnect('script', async () => {
+			const body = await postJson<ConfigResponse>('/api/config', { url, key });
+			if (body.ok) {
+				result = {
+					ok: true,
+					kind: 'script',
+					name: body.name,
+					email: body.email,
+					courseCount: body.courseCount ?? 0
+				};
+				finishOk();
+			} else
+				scriptError = {
+					code: body.code ?? 'unknown',
+					message: body.message ?? 'That connection did not work.'
+				};
+		});
+	}
+
+	async function connectSession() {
+		await runConnect('session', async () => {
+			const body = await postJson<SessionResponse>('/api/session', { cookie });
+			if (body.ok) {
+				result = { ok: true, kind: 'session', email: body.email };
+				finishOk();
+			} else
+				sessionError = {
+					code: body.code ?? 'unknown',
+					message: body.message ?? 'That cookie did not work.'
+				};
+		});
 	}
 </script>
 
@@ -152,10 +213,16 @@
 				>
 					<PartyPopperIcon class="size-6" />
 				</span>
-				<p class="mt-4 font-medium">{result.name ?? 'Connected'}</p>
+				<p class="mt-4 font-medium">
+					{result.kind === 'script' ? (result.name ?? 'Connected') : 'Connected'}
+				</p>
 				{#if result.email}<p class="text-sm text-muted-foreground">{result.email}</p>{/if}
 				<p class="mt-3 text-sm text-muted-foreground">
-					Syncing {result.courseCount} active {result.courseCount === 1 ? 'course' : 'courses'}.
+					{#if result.kind === 'session'}
+						Your courses are syncing now — this page updates as they arrive.
+					{:else}
+						Syncing {result.courseCount} active {result.courseCount === 1 ? 'course' : 'courses'}.
+					{/if}
 				</p>
 				<Button class="mt-6" onclick={() => (window.location.href = '/')}>
 					Open Classroom<ArrowRightIcon data-icon="inline-end" />
@@ -281,7 +348,7 @@
 				class="mt-4 flex flex-col gap-2 sm:flex-row"
 				onsubmit={(e) => {
 					e.preventDefault();
-					connect();
+					connectScript();
 				}}
 			>
 				<Input
@@ -291,20 +358,20 @@
 					placeholder="https://script.google.com/macros/s/…/exec"
 					autocomplete="off"
 					spellcheck={false}
-					aria-invalid={result && !result.ok ? true : undefined}
+					aria-invalid={scriptError ? true : undefined}
 					class="font-mono text-xs sm:text-xs"
 				/>
-				<Button type="submit" disabled={testing || !url} class="shrink-0">
-					{#if testing}<LoaderIcon
+				<Button type="submit" disabled={scriptPending || !url} class="shrink-0">
+					{#if scriptPending}<LoaderIcon
 							data-icon="inline-start"
 							class="animate-spin"
 						/>Checking{:else}Test and connect{/if}
 				</Button>
 			</form>
-			{#if result && !result.ok}
-				{@const target = fixStep[result.code]}
+			{#if scriptError}
+				{@const target = fixStep[scriptError.code]}
 				<div class="mt-3 rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
-					<p>{result.message}</p>
+					<p>{scriptError.message}</p>
 					{#if target !== undefined}
 						<button
 							type="button"
@@ -330,6 +397,25 @@
 						data-icon="inline-end"
 					/>
 				</Button>
+			{/if}
+		</div>
+		<div class="mt-4 rounded-xl bg-card p-5 ring-1 ring-foreground/10 sm:p-6">
+			<button
+				type="button"
+				class="text-sm font-medium underline underline-offset-2"
+				onclick={() => (useSession = !useSession)}
+			>
+				{useSession
+					? 'Back to the Apps Script setup'
+					: 'No Apps Script on your school account? Use a Classroom session instead'}
+			</button>
+			{#if useSession}
+				<SessionForm
+					bind:cookie
+					testing={sessionPending}
+					error={sessionError?.message}
+					onConnect={connectSession}
+				/>
 			{/if}
 		</div>
 	{/if}
