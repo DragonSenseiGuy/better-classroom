@@ -1,4 +1,4 @@
-import type { Comment, SubmissionFile } from '#lib/shared/types.ts';
+import type { Comment, Course, SubmissionFile } from '#lib/shared/types.ts';
 
 export const errorMessage = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
@@ -35,6 +35,9 @@ export const setDismissed = (ids: string[], dismissed: boolean) =>
 
 export const setCoursePrefs = (id: string, patch: CoursePrefs) =>
 	api.post(`/api/courses/${id}/prefs`, patch);
+
+export const syncSingleCourse = (id: string) =>
+	api.post<{ course: Course }>(`/api/courses/${id}/sync`, {});
 
 export const submitWork = (action: SubmissionAction, ref: WorkRef & { submissionId?: string }) =>
 	api.post('/api/submissions', { action, ...ref });

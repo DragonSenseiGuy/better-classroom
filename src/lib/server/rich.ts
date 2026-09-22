@@ -20,6 +20,7 @@ import {
 	withWebStudent
 } from './web-session';
 import { errorMessage } from './http';
+import { isVisible } from '#lib/course.ts';
 import {
 	findPost,
 	getKeepAlive,
@@ -126,7 +127,7 @@ async function walk(session: WebSession, full: boolean, publish: Publish): Promi
 	let updated = 0;
 	const errors: string[] = [];
 	const ctx: Ctx = { session, publish };
-	const courses = listAll('courses').filter((c) => !c.archived);
+	const courses = listAll('courses').filter(isVisible);
 	for (const course of courses) {
 		try {
 			if (full || course.students === undefined) {

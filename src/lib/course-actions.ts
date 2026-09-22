@@ -3,6 +3,7 @@ import { displayName, type CourseRef } from '#lib/course.ts';
 import { notify } from '#lib/toast.ts';
 
 export async function setCourseHidden(course: CourseRef, hidden: boolean, description?: string) {
+	if (!!course.hidden === hidden) return;
 	await setCoursePrefs(course.id, { hidden });
 	notify(
 		hidden ? 'amber' : 'emerald',

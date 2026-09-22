@@ -3,7 +3,7 @@ import { normalize, snippet } from './normalize';
 import type { SearchDoc } from '#lib/shared/types.ts';
 import { listAll } from './store';
 import { perUser } from './tenant';
-import { courseLabel, displayName } from '#lib/course.ts';
+import { courseLabel, displayName, isArchived, isVisible } from '#lib/course.ts';
 
 type Index = { docs: SearchDoc[]; hay: Haystacks; built: boolean };
 
@@ -16,7 +16,7 @@ const indexes = perUser<Index>(() => ({
 export function rebuildSearchIndex() {
 	const courses = new Map(
 		listAll('courses')
-			.filter((c) => !c.archived && !c.hidden)
+			.filter(isVisible)
 			.map((c) => [c.id, displayName(c)])
 	);
 	const nextDocs: SearchDoc[] = [];
@@ -28,7 +28,7 @@ export function rebuildSearchIndex() {
 		bodies.push(normalize(body.slice(0, 4000)));
 	};
 	for (const c of listAll('courses')) {
-		if (c.archived || c.hidden) continue;
+		if (isArchived(c)) continue;
 		push(
 			{
 				kind: 'course',

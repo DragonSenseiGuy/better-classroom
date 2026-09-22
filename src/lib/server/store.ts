@@ -26,6 +26,7 @@ const CONTENT_TABLES = [
 	'submissions'
 ] as const;
 export type ContentTable = (typeof CONTENT_TABLES)[number];
+export const CONTENT_TABLE_LIST: ContentTable[] = [...CONTENT_TABLES];
 
 const parse = <T>(rows: Row[]) => rows.map((r) => JSON.parse(r.data) as T);
 
@@ -170,10 +171,13 @@ export function saveSyncStatus(status: SyncStatus) {
 }
 
 export function snapshot(sync: SyncStatus): Snapshot {
+	// Sends every cached row, including content the user fetched on demand
+	// for archived courses. Laziness is enforced at write time (sync skips
+	// archived/hidden content, hide/archive deletes it), so the snapshot
+	// stays small for never-opened courses yet survives live resyncs for
+	// opened ones. Consumers filter archived rows out of Home/To-do/Inbox.
 	return {
-		courses: listAll('courses')
-			.filter((c) => !c.archived)
-			.map((c) => ({ ...c, hidden: c.hidden ?? false })),
+		courses: listAll('courses').map((c) => ({ ...c, hidden: c.hidden ?? false })),
 		courseWork: listAll('courseWork'),
 		materials: listAll('materials'),
 		announcements: listAll('announcements'),
@@ -229,8 +233,16 @@ export function updateCourse(
 	if (!prev) return null;
 	const next = patch(prev);
 	if (stable(prev) === stable(next)) return null;
-	db().query('UPDATE courses SET data = ? WHERE id = ?').run(JSON.stringify(next), courseId);
+	db()
+		.query('UPDATE courses SET data = ?, archived = ? WHERE id = ?')
+		.run(JSON.stringify(next), next.archived ? 1 : 0, courseId);
 	return { type: 'update', key: courseId, value: next };
+}
+
+export function clearCourseContent(courseId: string): void {
+	const d = db();
+	for (const table of CONTENT_TABLES)
+		d.query(`DELETE FROM ${table} WHERE courseId = ?`).run(courseId);
 }
 
 export function applyCourses(
@@ -247,36 +259,42 @@ export function applyCourses(
 	const upsert = d.query(
 		'INSERT INTO courses (id, data, archived) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET data = excluded.data, archived = excluded.archived'
 	);
+	const persist = (next: Course, prev: Course | undefined) => {
+		if (!prev) changes.push({ type: 'insert', key: next.id, value: next });
+		else if (stable(prev) !== stable(next))
+			changes.push({ type: 'update', key: next.id, value: next });
+		else return;
+		upsert.run(next.id, JSON.stringify(next), next.archived ? 1 : 0);
+		// Delete content only when transitioning into archived, so on-demand
+		// fetches for already-archived courses survive background syncs.
+		if (next.archived && !prev?.archived) clearCourseContent(next.id);
+	};
 	d.transaction(() => {
 		const seen = new Set<string>();
 		for (const c of courses) {
 			seen.add(c.id);
 			const prev = existing.get(c.id);
-			const next: Course = {
-				...c,
-				teachers: c.teachers?.length ? c.teachers : (prev?.teachers ?? []),
-				people: prev?.people ?? [],
-				students: prev?.students,
-				studentCount: prev?.studentCount,
-				archived: false,
-				lastSyncedAt: prev?.lastSyncedAt,
-				nickname: prev?.nickname,
-				color: prev?.color,
-				hidden: prev?.hidden ?? false
-			};
-			if (!prev) changes.push({ type: 'insert', key: c.id, value: next });
-			else if (stable(prev) !== stable(next))
-				changes.push({ type: 'update', key: c.id, value: next });
-			else continue;
-			upsert.run(c.id, JSON.stringify(next), 0);
+			// Web-mode lists ARCHIVED rows explicitly; Apps Script is
+			// ACTIVE-only so a missing row means archived (handled below).
+			persist(
+				{
+					...c,
+					teachers: c.teachers?.length ? c.teachers : (prev?.teachers ?? []),
+					people: prev?.people ?? [],
+					students: prev?.students,
+					studentCount: prev?.studentCount,
+					archived: c.courseState === 'ARCHIVED',
+					lastSyncedAt: prev?.lastSyncedAt,
+					nickname: prev?.nickname,
+					color: prev?.color,
+					hidden: prev?.hidden ?? false
+				},
+				prev
+			);
 		}
 		for (const prev of existing.values()) {
 			if (seen.has(prev.id) || prev.archived) continue;
-			const next = { ...prev, archived: true };
-			upsert.run(prev.id, JSON.stringify(next), 1);
-			changes.push({ type: 'delete', key: prev.id, value: next });
-			for (const table of CONTENT_TABLES)
-				d.query(`DELETE FROM ${table} WHERE courseId = ?`).run(prev.id);
+			persist({ ...prev, archived: true }, prev);
 		}
 	})();
 	return changes;
@@ -291,6 +309,39 @@ export function setCoursePrefs(courseId: string, patch: CoursePrefs) {
 		color: patch.color === undefined ? prev.color : (patch.color ?? undefined),
 		hidden: patch.hidden ?? prev.hidden ?? false
 	}));
+}
+
+/**
+ * Applies a prefs patch and, when hiding, drops the course content —
+ * atomically. Returns the course change plus per-table content deletes for
+ * broadcast. Unhiding flips the flag only; the caller refetches on demand.
+ */
+export function hideCourse(courseId: string, patch: CoursePrefs) {
+	const d = db();
+	return d.transaction(() => {
+		const prev = getCourse(courseId);
+		if (!prev) return null;
+		const doomed =
+			patch.hidden === true
+				? {
+						courseWork: listByCourse('courseWork', courseId),
+						materials: listByCourse('materials', courseId),
+						announcements: listByCourse('announcements', courseId),
+						topics: listByCourse('topics', courseId),
+						submissions: listByCourse('submissions', courseId)
+					}
+				: null;
+		const change = setCoursePrefs(courseId, patch);
+		if (!change) return null;
+		if (doomed) clearCourseContent(courseId);
+		const deletes: { table: ContentTable; rows: { id: string }[] }[] = doomed
+			? (Object.keys(doomed) as ContentTable[]).flatMap((table) => {
+					const rows = doomed[table];
+					return rows.length ? [{ table, rows }] : [];
+				})
+			: [];
+		return { change, deletes };
+	})();
 }
 
 export function mergeCoursePeople(

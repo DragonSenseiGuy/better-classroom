@@ -14,17 +14,20 @@
 	import SearchIcon from '@lucide/svelte/icons/search';
 	import SettingsIcon from '@lucide/svelte/icons/settings';
 	import GraduationCapIcon from '@lucide/svelte/icons/graduation-cap';
+	import ArchiveIcon from '@lucide/svelte/icons/archive';
 
 	type Profile = { name?: string; email?: string; photoUrl?: string } | null;
 
 	let {
 		courses,
+		archivedCourses = [],
 		profile,
 		onSearch,
 		inboxCount = 0,
 		todoCount = 0
 	}: {
 		courses: Course[];
+		archivedCourses?: Course[];
 		profile: Profile;
 		onSearch: () => void;
 		inboxCount?: number;
@@ -43,6 +46,26 @@
 	const isActive = (href: string) =>
 		href === '/' ? page.url.pathname === '/' : page.url.pathname.startsWith(href);
 </script>
+
+{#snippet courseRows(list: Course[], dimmed = false)}
+	{#each list as course (course.id)}
+		<Sidebar.MenuItem>
+			<CourseMenu {course} onRename={editCourse}>
+				<Sidebar.MenuButton
+					isActive={page.url.pathname.startsWith(`/courses/${course.id}`)}
+					tooltipContent={displayName(course)}
+				>
+					{#snippet child({ props })}
+						<a href={`/courses/${course.id}`} {...props} class:opacity-70={dimmed}>
+							<CourseDot id={course.id} size="md" class="shrink-0" />
+							<span>{displayName(course)}</span>
+						</a>
+					{/snippet}
+				</Sidebar.MenuButton>
+			</CourseMenu>
+		</Sidebar.MenuItem>
+	{/each}
+{/snippet}
 
 <Sidebar.Root collapsible="offcanvas">
 	<Sidebar.Content>
@@ -82,36 +105,42 @@
 			<Sidebar.GroupLabel>Courses</Sidebar.GroupLabel>
 			<Sidebar.GroupContent>
 				<Sidebar.Menu>
-					{#each courses as course (course.id)}
-						<Sidebar.MenuItem>
-							<CourseMenu {course} onRename={editCourse}>
-								<Sidebar.MenuButton
-									isActive={page.url.pathname.startsWith(`/courses/${course.id}`)}
-									tooltipContent={displayName(course)}
-								>
-									{#snippet child({ props })}
-										<a href={`/courses/${course.id}`} {...props}>
-											<CourseDot id={course.id} size="md" class="shrink-0" />
-											<span>{displayName(course)}</span>
-										</a>
-									{/snippet}
-								</Sidebar.MenuButton>
-							</CourseMenu>
-						</Sidebar.MenuItem>
-					{:else}
+					{@render courseRows(courses)}
+					{#if courses.length === 0}
 						<Sidebar.MenuItem>
 							<Sidebar.MenuButton>
 								{#snippet child({ props })}
 									<a href="/settings" {...props}
-										><span class="text-muted-foreground">No courses synced yet</span></a
+										><span class="text-muted-foreground"
+											>{archivedCourses.length
+												? 'No visible courses — see Archived below'
+												: 'No courses synced yet'}</span
+										></a
 									>
 								{/snippet}
 							</Sidebar.MenuButton>
 						</Sidebar.MenuItem>
-					{/each}
+					{/if}
 				</Sidebar.Menu>
 			</Sidebar.GroupContent>
 		</Sidebar.Group>
+		{#if archivedCourses.length}
+			<Sidebar.Group>
+				<Sidebar.GroupLabel>
+					{#snippet child({ props })}
+						<a href="/archived" {...props} class="flex items-center gap-1.5 hover:text-foreground">
+							<ArchiveIcon class="size-3.5" />
+							<span>Archived ({archivedCourses.length})</span>
+						</a>
+					{/snippet}
+				</Sidebar.GroupLabel>
+				<Sidebar.GroupContent>
+					<Sidebar.Menu>
+						{@render courseRows(archivedCourses, true)}
+					</Sidebar.Menu>
+				</Sidebar.GroupContent>
+			</Sidebar.Group>
+		{/if}
 	</Sidebar.Content>
 	<Sidebar.Footer>
 		<Sidebar.Menu>

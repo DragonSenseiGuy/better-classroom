@@ -1,4 +1,4 @@
-import { eq, type InitialQueryBuilder } from '@tanstack/svelte-db';
+import { and, eq, type InitialQueryBuilder } from '@tanstack/svelte-db';
 import {
 	announcements,
 	courses,
@@ -13,7 +13,7 @@ export const workWithContext = (q: InitialQueryBuilder) =>
 	q
 		.from({ w: courseWork })
 		.innerJoin({ c: courses }, ({ w, c }) => eq(w.courseId, c.id))
-		.where(({ c }) => eq(c.hidden, false))
+		.where(({ c }) => and(eq(c.hidden, false), eq(c.archived, false)))
 		.leftJoin({ s: submissions }, ({ w, s }) => eq(w.id, s.courseWorkId));
 
 export const workInCourse = (q: InitialQueryBuilder, courseId: string | undefined) =>
@@ -26,13 +26,13 @@ export const inboxAnnouncements = (q: InitialQueryBuilder) =>
 	q
 		.from({ a: announcements })
 		.innerJoin({ c: courses }, ({ a, c }) => eq(a.courseId, c.id))
-		.where(({ c }) => eq(c.hidden, false));
+		.where(({ c }) => and(eq(c.hidden, false), eq(c.archived, false)));
 
 export const inboxMaterials = (q: InitialQueryBuilder) =>
 	q
 		.from({ m: materials })
 		.innerJoin({ c: courses }, ({ m, c }) => eq(m.courseId, c.id))
-		.where(({ c }) => eq(c.hidden, false));
+		.where(({ c }) => and(eq(c.hidden, false), eq(c.archived, false)));
 
 export const allDismissals = (q: InitialQueryBuilder) => q.from({ d: dismissals });
 

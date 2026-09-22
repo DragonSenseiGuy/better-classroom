@@ -2,8 +2,15 @@ import type { Course } from '#lib/shared/types.ts';
 
 export type CourseRef = Pick<
 	Course,
-	'id' | 'name' | 'nickname' | 'color' | 'section' | 'alternateLink'
+	'id' | 'name' | 'nickname' | 'color' | 'section' | 'alternateLink' | 'hidden' | 'archived'
 >;
+
+type ArchivedLike = Pick<Course, 'hidden' | 'archived'>;
+
+/** Hidden locally or archived in Classroom: kept as a name row, content loads on demand. */
+export const isArchived = (course: ArchivedLike) => !!course.hidden || !!course.archived;
+
+export const isVisible = (course: ArchivedLike) => !isArchived(course);
 
 type Named = { name: string; nickname?: string };
 
