@@ -69,6 +69,29 @@ export async function refreshSavedSession(): Promise<RichStatus | null> {
 	}
 }
 
+export type WebExpired = { expired: true; savedAt: number; detail?: string } | { expired: false };
+
+/**
+ * Deterministic trigger for the app-load expiry dialog. Mirrors
+ * webProvider.status(): expired only when a saved session has a terminal
+ * RichStatus for the same savedAt. Silent soft-renew (rotation + fresh
+ * token refetch) already ran upstream; this reports only hard expiry that
+ * needs a fresh pasted cookie.
+ */
+export function webExpiredState(): WebExpired {
+	const session = getWebSession();
+	if (!session) return { expired: false };
+	const status = getRichStatus();
+	if (
+		status &&
+		!status.ok &&
+		status.expired &&
+		status.sessionSavedAt === session.savedAt
+	)
+		return { expired: true, savedAt: session.savedAt, detail: status.message };
+	return { expired: false };
+}
+
 type Ctx = {
 	session: WebSession;
 	publish: Publish;

@@ -13,6 +13,7 @@
 	import CommandMenu from '#lib/components/command-menu.svelte';
 	import FirstSyncBanner from '#lib/components/first-sync-banner.svelte';
 	import RenameCourseDialog from '#lib/components/rename-course-dialog.svelte';
+	import SessionExpiredDialog from '#lib/components/session-expired-dialog.svelte';
 	import { courseEditor } from '#lib/course-editor.svelte.ts';
 	import { createDb } from '#lib/db/client.ts';
 	import { courses as coursesCollection } from '#lib/db/collections.ts';
@@ -157,4 +158,5 @@
 
 	<CommandMenu bind:open={paletteOpen} {courses} />
 	<RenameCourseDialog bind:course={courseEditor.course} />
+	<SessionExpiredDialog expired={data.webExpired?.expired ? data.webExpired : null} />
 </DbProvider>
