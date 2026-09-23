@@ -18,7 +18,7 @@
 	format is mapped.
 </p>
 <ol class="mt-2 list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
-	<li>Open classroom.google.com signed in with your school account.</li>
+	<li>Open classroom.google.com/u/0/h/st signed in with your school account.</li>
 	<li>Open DevTools → Network, reload, click the first classroom.google.com request.</li>
 	<li>Under Request Headers copy the whole <code>Cookie</code> value.</li>
 </ol>
