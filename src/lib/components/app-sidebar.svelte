@@ -4,7 +4,10 @@
 	import { Kbd, KbdGroup } from '#lib/components/ui/kbd/index.js';
 	import { page } from '$app/state';
 	import { afterNavigate } from '$app/navigation';
+	import { browser } from '$app/env';
 	import { displayName, type CourseRef as Course } from '#lib/course.ts';
+	import { loadArchivedOpen, saveArchivedOpen } from '#lib/sidebar-prefs.ts';
+	import { cn } from '#lib/utils.js';
 	import { createCourseOrder, type OrderSection } from '#lib/course-reorder.svelte.ts';
 	import CourseDot from '#lib/components/course-dot.svelte';
 	import CourseMenu from '#lib/components/course-menu.svelte';
@@ -14,6 +17,7 @@
 	import InboxIcon from '@lucide/svelte/icons/inbox';
 	import SearchIcon from '@lucide/svelte/icons/search';
 	import SettingsIcon from '@lucide/svelte/icons/settings';
+	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import ArchiveIcon from '@lucide/svelte/icons/archive';
 
 	type Profile = { name?: string; email?: string; photoUrl?: string } | null;
@@ -50,6 +54,22 @@
 	]);
 	const isActive = (href: string) =>
 		href === '/' ? page.url.pathname === '/' : page.url.pathname.startsWith(href);
+
+	// Archived starts minimized; the last toggle choice persists across reloads.
+	let archivedOpen = $state(browser ? loadArchivedOpen(localStorage) : false);
+	const archivedIds = $derived(new Set(archivedCourses.map((c) => c.id)));
+	const activeCourseId = $derived.by(() => {
+		const path = page.url.pathname;
+		return path.startsWith('/courses/') ? (path.split('/')[2] ?? null) : null;
+	});
+	// Keep the current course visible when it lives in the archived section.
+	$effect(() => {
+		if (activeCourseId && archivedIds.has(activeCourseId)) archivedOpen = true;
+	});
+	$effect(() => {
+		saveArchivedOpen(browser ? localStorage : null, archivedOpen);
+	});
+	const toggleArchived = () => (archivedOpen = !archivedOpen);
 </script>
 
 {#snippet courseRows(section: OrderSection, dimmed = false)}
@@ -158,25 +178,39 @@
 		</Sidebar.Group>
 		{#if archivedCourses.length}
 			<Sidebar.Group>
-				<Sidebar.GroupLabel>
-					{#snippet child({ props })}
-						<a href="/archived" {...props} class="flex items-center gap-1.5 hover:text-foreground">
-							<ArchiveIcon class="size-3.5" />
-							<span>Archived ({archivedCourses.length})</span>
-						</a>
-					{/snippet}
-				</Sidebar.GroupLabel>
-				<Sidebar.GroupContent>
-					<Sidebar.Menu
-						aria-label="Archived courses, drag to reorder"
-						ondragover={(e) => {
-							if (order.dragId && order.dragSection === 'archived') e.preventDefault();
-						}}
-						ondrop={(e) => order.dropAtEnd('archived', e)}
+				<Sidebar.GroupLabel class="gap-0.5">
+					<button
+						type="button"
+						onclick={toggleArchived}
+						aria-expanded={archivedOpen}
+						aria-label={archivedOpen ? 'Collapse archived courses' : 'Expand archived courses'}
+						class="flex shrink-0 items-center justify-center rounded-md p-0.5 text-sidebar-foreground/70 hover:text-foreground"
 					>
-						{@render courseRows('archived', true)}
-					</Sidebar.Menu>
-				</Sidebar.GroupContent>
+						<ChevronRightIcon
+							class={cn('size-3.5 transition-transform duration-200', archivedOpen && 'rotate-90')}
+						/>
+					</button>
+					<a
+						href="/archived"
+						class="flex min-w-0 flex-1 items-center gap-1.5 hover:text-foreground"
+					>
+						<ArchiveIcon class="size-3.5 shrink-0" />
+						<span class="truncate">Archived ({archivedCourses.length})</span>
+					</a>
+				</Sidebar.GroupLabel>
+				{#if archivedOpen}
+					<Sidebar.GroupContent>
+						<Sidebar.Menu
+							aria-label="Archived courses, drag to reorder"
+							ondragover={(e) => {
+								if (order.dragId && order.dragSection === 'archived') e.preventDefault();
+							}}
+							ondrop={(e) => order.dropAtEnd('archived', e)}
+						>
+							{@render courseRows('archived', true)}
+						</Sidebar.Menu>
+					</Sidebar.GroupContent>
+				{/if}
 			</Sidebar.Group>
 		{/if}
 	</Sidebar.Content>
