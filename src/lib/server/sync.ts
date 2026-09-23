@@ -6,13 +6,17 @@ import { broadcast } from './events';
 import { rebuildSearchIndex } from './search';
 import { pushConfigured, sendPush } from './push';
 import { notifyPayloads } from '#lib/shared/notify.ts';
+import { isArchived } from '#lib/course.ts';
 import { enrichers, recordSource } from './providers';
 import {
 	applyContent,
 	applyCourses,
+	clearCourseContent,
 	getCourse,
 	getMeta,
 	getSyncStatus,
+	hideCourse,
+	listAll,
 	listByCourse,
 	mergeCoursePeople,
 	saveSyncStatus,
@@ -21,6 +25,7 @@ import {
 	setCoursePrefs,
 	setDismissed,
 	touchCourseSynced,
+	CONTENT_TABLE_LIST,
 	type ContentTable,
 	type CoursePrefs
 } from './store';
@@ -62,11 +67,14 @@ function setState(patch: Partial<SyncStatus>) {
 	broadcast({ type: 'sync', sync: u.state });
 }
 
-function publish(collection: CollectionName, changes: Change[]) {
+function publish(collection: CollectionName, changes: Change[], opts?: { silent?: boolean }) {
 	if (changes.length === 0) return;
 	const u = users();
 	u.state = { ...u.state, version: u.state.version + 1 };
 	broadcast({ type: 'changes', version: u.state.version, collection, changes });
+	// On-demand backfills re-insert old work the user already saw in
+	// Classroom; notifying for those would spam "new assignment" pushes.
+	if (opts?.silent) return;
 	// The first sync inserts the whole backlog one course at a time; pushing that
 	// would be dozens of notifications for work the user has already seen.
 	if (!pushConfigured() || !u.state.syncedAt) return;
@@ -130,14 +138,23 @@ async function doSync(options: { full?: boolean }) {
 			teachers: c.teachers?.map(person)
 		}));
 		publish('courses', applyCourses(courses));
-		setState({ pending: courses.length, courseCount: courses.length });
+		cullPreLazyContent();
+		// True lazy: archived + hidden keep only the name row. Never fetch
+		// their coursework/materials/submissions until opened on demand.
+		// applyCourses just persisted hidden flags, so one listAll gives the
+		// full picture without an N+1 getCourse per course.
+		const hiddenById = new Map(listAll('courses').map((c) => [c.id, !!c.hidden]));
+		const activeCourses = courses.filter(
+			(c) => c.courseState !== 'ARCHIVED' && !hiddenById.get(c.id)
+		);
+		setState({ pending: activeCourses.length, courseCount: courses.length });
 		void warmAvatars([
 			overview.profile.photoUrl ?? undefined,
-			...courses.flatMap((c) => (c.teachers ?? []).map((t) => t.photoUrl))
+			...activeCourses.flatMap((c) => (c.teachers ?? []).map((t) => t.photoUrl))
 		]);
 
 		const errors: string[] = scriptErrors('Courses', overview.errors);
-		const queue = [...courses];
+		const queue = [...activeCourses];
 		const worker = async () => {
 			for (let c = queue.shift(); c; c = queue.shift()) {
 				try {
@@ -154,7 +171,7 @@ async function doSync(options: { full?: boolean }) {
 			}
 		};
 		await Promise.all(
-			Array.from({ length: Math.min(config.syncConcurrency, courses.length) }, worker)
+			Array.from({ length: Math.min(config.syncConcurrency, queue.length) }, worker)
 		);
 		rebuildSearchIndex();
 		if (errors.length === 0) {
@@ -270,16 +287,20 @@ export function shapeContent(courseId: string, raw: RawCourseContent) {
 	};
 }
 
-export function applyCourseContent(courseId: string, raw: RawCourseContent) {
+export function applyCourseContent(
+	courseId: string,
+	raw: RawCourseContent,
+	opts?: { silent?: boolean }
+) {
 	const content = shapeContent(courseId, raw);
 	const partial = raw.partial === true;
 	for (const table of Object.keys(content) as ContentTable[]) {
 		if (raw[table] === undefined) continue;
 		const keepMissing = partial && table !== 'submissions';
-		publish(table, applyContent(table, courseId, content[table], keepMissing));
+		publish(table, applyContent(table, courseId, content[table], keepMissing), opts);
 	}
 	const touched = touchCourseSynced(courseId);
-	if (touched) publish('courses', [touched]);
+	if (touched) publish('courses', [touched], opts);
 	return unknownReferences(courseId, content);
 }
 
@@ -314,21 +335,26 @@ function unknownReferences(courseId: string, content: ReturnType<typeof shapeCon
 	return { users: [...users], topics };
 }
 
-async function resolveUnknown(courseId: string, name: string, users: string[]) {
+async function resolveUnknown(
+	courseId: string,
+	name: string,
+	users: string[],
+	opts?: { silent?: boolean }
+) {
 	const found = await recordSource().lookup(courseId, users);
 	const change = mergeCoursePeople(courseId, {
 		teachers: found.teachers?.map(person),
 		people: found.people?.map(person)
 	});
 	if (change) {
-		publish('courses', [change]);
+		publish('courses', [change], opts);
 		void warmAvatars(
 			[...change.value.teachers, ...(change.value.people ?? [])].map((p) => p.photoUrl)
 		);
 	}
 	if (found.topics) {
 		const topics = shapeContent(courseId, { topics: found.topics }).topics;
-		publish('topics', applyContent('topics', courseId, topics, false));
+		publish('topics', applyContent('topics', courseId, topics, false), opts);
 	}
 	if (users.length) {
 		const tried = getMeta<Record<string, number>>(`lookupTried:${courseId}`) ?? {};
@@ -343,12 +369,66 @@ async function resolveUnknown(courseId: string, name: string, users: string[]) {
 }
 
 export function updateCoursePrefs(courseId: string, patch: CoursePrefs) {
+	if (patch.hidden !== undefined) {
+		const result = hideCourse(courseId, patch);
+		if (!result) return getCourse(courseId);
+		publish('courses', [result.change]);
+		for (const { table, rows } of result.deletes)
+			publish(
+				table,
+				rows.map((r) => ({ type: 'delete' as const, key: r.id, value: r }))
+			);
+		rebuildSearchIndex();
+		if (!patch.hidden) {
+			// Unhiding leaves the course empty until content arrives; fetch
+			// it now (silently — this is old work, not new arrivals).
+			void syncSingleCourse(courseId, { silent: true }).catch((err) =>
+				console.error('unhide sync failed', err)
+			);
+		}
+		return result.change.value;
+	}
 	const change = setCoursePrefs(courseId, patch);
 	if (change) {
 		publish('courses', [change]);
 		rebuildSearchIndex();
 	}
 	return change?.value ?? getCourse(courseId);
+}
+
+/**
+ * One-time migration for databases that synced hidden courses with full
+ * content before lazy-archived landed. Deletes that stale content once.
+ */
+function cullPreLazyContent() {
+	if (getMeta<number>('archivedLazyCleanupV1')) return;
+	const doomed = listAll('courses').filter(isArchived);
+	const found = new Map<ContentTable, { id: string }[]>();
+	for (const c of doomed)
+		for (const table of CONTENT_TABLE_LIST) {
+			const rows = listByCourse(table, c.id);
+			if (rows.length) found.set(table, [...(found.get(table) ?? []), ...rows]);
+		}
+	for (const c of doomed) clearCourseContent(c.id);
+	for (const [table, rows] of found)
+		publish(
+			table,
+			rows.map((r) => ({ type: 'delete' as const, key: r.id, value: r }))
+		);
+	setMeta('archivedLazyCleanupV1', 1);
+}
+
+/** Fetch content for one archived/hidden course on demand. Bypasses the lazy filter. */
+export async function syncSingleCourse(courseId: string, opts?: { silent?: boolean }) {
+	const course = getCourse(courseId);
+	if (!course) throw new Error('Course not found');
+	const source = recordSource();
+	const content = await source.courseContent(courseId, 0, true);
+	const unknown = applyCourseContent(courseId, content, opts);
+	if (unknown.users.length || unknown.topics)
+		await resolveUnknown(courseId, course.name, unknown.users, opts);
+	rebuildSearchIndex();
+	return getCourse(courseId);
 }
 
 export type SubmissionAction = 'turnIn' | 'reclaim';

@@ -10,9 +10,11 @@ import {
 	deleteMeta,
 	getCourse,
 	getMeta,
+	hideCourse,
 	listByCourse,
 	setCoursePrefs,
 	setMeta,
+	snapshot,
 	updateCourse
 } from './store';
 import type { Announcement } from '#lib/shared/types.ts';
@@ -58,7 +60,7 @@ test('applyCourses inserts, updates and archives', () => {
 		const changes = applyCourses([course('c1', 'Renamed')]);
 		expect(changes.map((c) => [c.type, c.key])).toEqual([
 			['update', 'c1'],
-			['delete', 'c2']
+			['update', 'c2']
 		]);
 		expect(getCourse('c1')?.name).toBe('Renamed');
 		expect(getCourse('c2')?.archived).toBe(true);
@@ -99,5 +101,67 @@ test('applyContent keeps rich html only while the post is unchanged', () => {
 		expect(listByCourse('announcements', 'c1')[0]?.html).toBe('<b>x</b>');
 		applyContent('announcements', 'c1', [post('r', { updatedAt: 6 })]);
 		expect(listByCourse('announcements', 'c1')[0]?.html).toBeUndefined();
+	});
+});
+
+test('explicit ARCHIVED keeps the name row and drops content', () => {
+	runAs('store-test-archived', () => {
+		const changes = applyCourses([{ ...course('arc1'), courseState: 'ARCHIVED' }]);
+		expect(changes.map((c) => [c.type, c.key])).toEqual([['insert', 'arc1']]);
+		expect(getCourse('arc1')?.archived).toBe(true);
+		applyContent('announcements', 'arc1', [{ ...post('x'), courseId: 'arc1' }]);
+		expect(listByCourse('announcements', 'arc1').length).toBe(1);
+		// Re-listing as ARCHIVED (e.g. a rename) re-marks without a delete event…
+		const again = applyCourses([{ ...course('arc1', 'Renamed'), courseState: 'ARCHIVED' }]);
+		expect(again.map((c) => [c.type, c.key])).toEqual([['update', 'arc1']]);
+		// …but a transition into archived wipes content.
+		applyCourses([{ ...course('arc1', 'Renamed'), courseState: 'ACTIVE' }]);
+		expect(getCourse('arc1')?.archived).toBe(false);
+		expect(listByCourse('announcements', 'arc1').length).toBe(1);
+		applyCourses([{ ...course('arc1', 'Renamed'), courseState: 'ARCHIVED' }]);
+		expect(getCourse('arc1')?.archived).toBe(true);
+		expect(listByCourse('announcements', 'arc1').length).toBe(0);
+	});
+});
+
+test('on-demand content cached for archived courses survives background relists', () => {
+	runAs('store-test-cache', () => {
+		applyCourses([{ ...course('arc2'), courseState: 'ARCHIVED' }]);
+		applyContent('announcements', 'arc2', [{ ...post('y'), courseId: 'arc2' }]);
+		// Metadata-only relist must not wipe the fetched cache.
+		applyCourses([{ ...course('arc2', 'Renamed again'), courseState: 'ARCHIVED' }]);
+		expect(listByCourse('announcements', 'arc2').length).toBe(1);
+	});
+});
+
+test('hideCourse atomically hides and clears content', () => {
+	runAs('store-test-hide', () => {
+		applyCourses([course('hid1')]);
+		applyContent('announcements', 'hid1', [{ ...post('h'), courseId: 'hid1' }]);
+		const result = hideCourse('hid1', { hidden: true });
+		expect(result?.change.value.hidden).toBe(true);
+		expect(result?.deletes.flatMap((d) => d.rows).length).toBe(1);
+		expect(listByCourse('announcements', 'hid1').length).toBe(0);
+		expect(getCourse('hid1')?.hidden).toBe(true);
+		const back = hideCourse('hid1', { hidden: false });
+		expect(back?.change.value.hidden).toBe(false);
+		expect(back?.deletes).toEqual([]);
+	});
+});
+
+test('snapshot keeps archived names with their on-demand content', () => {
+	runAs('store-test-snapshot', () => {
+		applyCourses([{ ...course('snap1'), courseState: 'ARCHIVED' }]);
+		applyContent('announcements', 'snap1', [{ ...post('s'), courseId: 'snap1' }]);
+		const snap = snapshot({
+			status: 'idle',
+			configured: false,
+			pending: 0,
+			courseCount: 0,
+			intervalMinutes: 0,
+			version: 0
+		});
+		expect(snap.courses.find((c) => c.id === 'snap1')?.archived).toBe(true);
+		expect(snap.announcements.filter((a) => a.courseId === 'snap1').length).toBe(1);
 	});
 });

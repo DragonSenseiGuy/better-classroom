@@ -13,7 +13,7 @@
 	import WorkItem from '#lib/components/work-item.svelte';
 	import Announcement from '#lib/components/announcement.svelte';
 	import { formatRelative } from '#lib/format.ts';
-	import { courseLabel, displayName } from '#lib/course.ts';
+	import { courseLabel, displayName, isArchived } from '#lib/course.ts';
 	import { pluralize } from '#lib/text.ts';
 	import CourseDot from '#lib/components/course-dot.svelte';
 	import ExternalLinkIcon from '@lucide/svelte/icons/external-link';
@@ -21,6 +21,10 @@
 	import InboxIcon from '@lucide/svelte/icons/inbox';
 	import PersonList from './person-list.svelte';
 	import GradesTab from './grades-tab.svelte';
+	import { syncSingleCourse } from '#lib/api.ts';
+	import { setCourseHidden } from '#lib/course-actions.ts';
+	import EyeIcon from '@lucide/svelte/icons/eye';
+	import LoaderIcon from '@lucide/svelte/icons/loader-circle';
 
 	const courseQuery = useLiveQuery({
 		query: (q) =>
@@ -50,6 +54,50 @@
 
 	const course = $derived(courseQuery.data);
 	const description = $derived(courseLabel(course?.description));
+	const isArchivedView = $derived(!!course && isArchived(course));
+	// Keyed by course id so a slow fetch for one course can't block or
+	// clobber another when navigating quickly between archived courses.
+	let loadingFor = $state<string | null>(null);
+	let errorFor = $state<{ id: string; message: string } | null>(null);
+	// One attempt per course id: an empty result still counts, so genuinely
+	// empty courses don't loop. Retry resets the key below.
+	let fetchedFor = $state<string | null>(null);
+	const loadingArchived = $derived(course ? loadingFor === course.id : false);
+	const archivedError = $derived(
+		course && errorFor?.id === course.id ? errorFor.message : null
+	);
+
+	async function ensureArchivedContent(id: string) {
+		if (fetchedFor === id || loadingFor === id) return;
+		fetchedFor = id;
+		loadingFor = id;
+		if (errorFor?.id === id) errorFor = null;
+		try {
+			await syncSingleCourse(id);
+		} catch (err: unknown) {
+			errorFor = { id, message: err instanceof Error ? err.message : String(err) };
+		} finally {
+			if (loadingFor === id) loadingFor = null;
+		}
+	}
+
+	function retryArchived() {
+		const c = course;
+		if (!c) return;
+		fetchedFor = null;
+		void ensureArchivedContent(c.id);
+	}
+
+	$effect(() => {
+		const c = course;
+		// Fetch-on-open: archived/hidden keep names only until opened.
+		// Active courses sync in the background; unhidden ones refetch on
+		// unhide via updateCoursePrefs, so only archived views fetch here.
+		if (!c || !isArchived(c)) return;
+		if (workQuery.data.length > 0 || materialQuery.data.length > 0 || streamQuery.data.length > 0)
+			fetchedFor = c.id;
+		else void ensureArchivedContent(c.id);
+	});
 	const work = $derived(
 		course ? workQuery.data.map((r) => summarize(r.w, r.s ?? undefined, displayName(course))) : []
 	);
@@ -124,6 +172,24 @@
 			</Button>
 		{/if}
 	</div>
+	{#if isArchivedView}
+		<div class="mt-4 flex flex-wrap items-center gap-2 rounded-lg border border-dashed px-3 py-2 text-sm text-muted-foreground">
+			{#if loadingArchived}
+				<LoaderIcon class="size-4 animate-spin" />
+				<span>Loading archived content…</span>
+			{:else if archivedError}
+				<span>Couldn't load this archived course: {archivedError}</span>
+				<Button variant="outline" size="sm" onclick={retryArchived}>Retry</Button>
+			{:else}
+				<span>This course is archived — content was loaded on demand.</span>
+			{/if}
+			{#if course.hidden}
+				<Button variant="outline" size="sm" onclick={() => setCourseHidden(course, false)}>
+					<EyeIcon data-icon="inline-start" />Show course
+				</Button>
+			{/if}
+		</div>
+	{/if}
 
 	<Tabs.Root value={tab} onValueChange={setTab} class="mt-6">
 		<Tabs.List variant="line">

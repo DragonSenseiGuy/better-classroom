@@ -16,8 +16,7 @@
 		children
 	}: { course: Course; onRename: (course: Course) => void; children: Snippet } = $props();
 
-	const hide = () =>
-		setCourseHidden(course, true, 'Find it again under Settings → Hidden courses.');
+	const hide = () => setCourseHidden(course, true, 'Find it again under Archived.');
 
 	async function resetName() {
 		const nickname = course.nickname;

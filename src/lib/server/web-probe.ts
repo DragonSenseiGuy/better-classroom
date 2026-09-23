@@ -16,6 +16,7 @@ import {
 } from './classroom-web';
 import { describeHomeHtml, type HomeDiag } from './course-discovery';
 import { errorMessage } from './http';
+import { isVisible } from '#lib/course.ts';
 import { getProfile, listAll, listByCourse } from './store';
 
 export type ProbeError = { ok: false; code: 'cookie' | 'probe' | 'state'; message: string };
@@ -226,7 +227,7 @@ export function sanitizeProbeAttempts(attempts: ProbeAttempt[]): ProbeAttempt[] 
  * a slot can actually load posts.
  */
 export async function probeSession(cookie: string): Promise<ProbeResult> {
-	const courses = listAll('courses').filter((c) => !c.archived);
+	const courses = listAll('courses').filter(isVisible);
 	const attempts: ProbeAttempt[] = [];
 	if (courses.length === 0)
 		return {
