@@ -30,7 +30,9 @@ export type StreamItem = {
 	/**
 	 * Creation timestamp from the PostItem slot. The stream payload exposes
 	 * no reliable update time, so there is deliberately no updatedAt here —
-	 * edits surface on full syncs (and text/author edits via enrichment),
+	 * web-records mirrors creation into updateTime, and shapeContent falls
+	 * back to creationTime, so updatedAt ordering still reflects recency.
+	 * Edits surface on full syncs (and text/author edits via enrichment),
 	 * not on incremental `since` filters.
 	 */
 	createdAt?: number;

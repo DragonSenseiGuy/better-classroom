@@ -29,7 +29,7 @@ import {
 	type ContentTable,
 	type CoursePrefs
 } from './store';
-import { listUserIds } from './db';
+import { db, listUserIds } from './db';
 import { perUser, runAs } from './tenant';
 import { dueAt, ms } from './time';
 import type { Attachment, Change, CollectionName, SyncStatus, Teacher } from '#lib/shared/types.ts';
@@ -122,23 +122,27 @@ async function doSync(options: { full?: boolean }) {
 			email: overview.profile.email ?? undefined,
 			photoUrl: overview.profile.photoUrl ?? undefined
 		});
-		const courses = overview.courses.map((c) => ({
-			id: c.id,
-			name: c.name,
-			section: c.section ?? undefined,
-			descriptionHeading: c.descriptionHeading ?? undefined,
-			description: c.description ?? undefined,
-			room: c.room ?? undefined,
-			ownerId: c.ownerId ?? undefined,
-			courseState: c.courseState,
-			alternateLink: c.alternateLink ?? undefined,
-			calendarId: c.calendarId ?? undefined,
-			createdAt: ms(c.creationTime),
-			updatedAt: ms(c.updateTime),
-			teachers: c.teachers?.map(person)
-		}));
+		const courses = overview.courses.map((c) => {
+			const createdAt = ms(c.creationTime);
+			return {
+				id: c.id,
+				name: c.name,
+				section: c.section ?? undefined,
+				descriptionHeading: c.descriptionHeading ?? undefined,
+				description: c.description ?? undefined,
+				room: c.room ?? undefined,
+				ownerId: c.ownerId ?? undefined,
+				courseState: c.courseState,
+				alternateLink: c.alternateLink ?? undefined,
+				calendarId: c.calendarId ?? undefined,
+				createdAt,
+				updatedAt: ms(c.updateTime) || createdAt,
+				teachers: c.teachers?.map(person)
+			};
+		});
 		publish('courses', applyCourses(courses));
 		cullPreLazyContent();
+		backfillUpdatedAt(publish);
 		// True lazy: archived + hidden keep only the name row. Never fetch
 		// their coursework/materials/submissions until opened on demand.
 		// applyCourses just persisted hidden flags, so one listAll gives the
@@ -222,9 +226,14 @@ const clean = (a: Attachment) => ({
 });
 
 export function shapeContent(courseId: string, raw: RawCourseContent) {
+	// Web/session posts carry creationTime only (no reliable updateTime).
+	// The course stream, inbox and search all sort by updatedAt, so fall
+	// back to creationTime — otherwise those rows land at updatedAt 0 and
+	// sort as ties (stale posts on top).
 	return {
 		courseWork: (raw.courseWork ?? []).map((w) => {
 			const due = dueAt(w.dueDate, w.dueTime);
+			const createdAt = ms(w.creationTime);
 			return {
 				id: w.id,
 				courseId,
@@ -232,8 +241,8 @@ export function shapeContent(courseId: string, raw: RawCourseContent) {
 				description: w.description ?? undefined,
 				materials: (w.materials ?? []).map(clean),
 				alternateLink: w.alternateLink ?? undefined,
-				createdAt: ms(w.creationTime),
-				updatedAt: ms(w.updateTime),
+				createdAt,
+				updatedAt: ms(w.updateTime) || createdAt,
 				dueAt: due.dueAt,
 				hasDueTime: due.hasDueTime,
 				maxPoints: w.maxPoints ?? undefined,
@@ -242,48 +251,57 @@ export function shapeContent(courseId: string, raw: RawCourseContent) {
 				creatorUserId: w.creatorUserId ?? undefined
 			};
 		}),
-		materials: (raw.materials ?? []).map((m) => ({
-			id: m.id,
-			courseId,
-			title: m.title,
-			description: m.description ?? undefined,
-			materials: (m.materials ?? []).map(clean),
-			alternateLink: m.alternateLink ?? undefined,
-			createdAt: ms(m.creationTime),
-			updatedAt: ms(m.updateTime),
-			topicId: m.topicId ?? undefined,
-			creatorUserId: m.creatorUserId ?? undefined
-		})),
-		announcements: (raw.announcements ?? []).map((a) => ({
-			id: a.id,
-			courseId,
-			text: a.text ?? '',
-			materials: (a.materials ?? []).map(clean),
-			alternateLink: a.alternateLink ?? undefined,
-			createdAt: ms(a.creationTime),
-			updatedAt: ms(a.updateTime),
-			creatorUserId: a.creatorUserId ?? undefined
-		})),
+		materials: (raw.materials ?? []).map((m) => {
+			const createdAt = ms(m.creationTime);
+			return {
+				id: m.id,
+				courseId,
+				title: m.title,
+				description: m.description ?? undefined,
+				materials: (m.materials ?? []).map(clean),
+				alternateLink: m.alternateLink ?? undefined,
+				createdAt,
+				updatedAt: ms(m.updateTime) || createdAt,
+				topicId: m.topicId ?? undefined,
+				creatorUserId: m.creatorUserId ?? undefined
+			};
+		}),
+		announcements: (raw.announcements ?? []).map((a) => {
+			const createdAt = ms(a.creationTime);
+			return {
+				id: a.id,
+				courseId,
+				text: a.text ?? '',
+				materials: (a.materials ?? []).map(clean),
+				alternateLink: a.alternateLink ?? undefined,
+				createdAt,
+				updatedAt: ms(a.updateTime) || createdAt,
+				creatorUserId: a.creatorUserId ?? undefined
+			};
+		}),
 		topics: (raw.topics ?? []).map((t) => ({
 			id: t.id,
 			courseId,
 			name: t.name,
 			updatedAt: ms(t.updateTime)
 		})),
-		submissions: (raw.submissions ?? []).map((s) => ({
-			id: s.id,
-			courseId,
-			courseWorkId: s.courseWorkId,
-			state: s.state,
-			late: !!s.late,
-			draftGrade: s.draftGrade ?? undefined,
-			assignedGrade: s.assignedGrade ?? undefined,
-			alternateLink: s.alternateLink ?? undefined,
-			courseWorkType: s.courseWorkType ?? undefined,
-			createdAt: s.creationTime ? ms(s.creationTime) : undefined,
-			updatedAt: ms(s.updateTime),
-			attachments: (s.attachments ?? []).map(clean)
-		}))
+		submissions: (raw.submissions ?? []).map((s) => {
+			const createdAt = s.creationTime ? ms(s.creationTime) : undefined;
+			return {
+				id: s.id,
+				courseId,
+				courseWorkId: s.courseWorkId,
+				state: s.state,
+				late: !!s.late,
+				draftGrade: s.draftGrade ?? undefined,
+				assignedGrade: s.assignedGrade ?? undefined,
+				alternateLink: s.alternateLink ?? undefined,
+				courseWorkType: s.courseWorkType ?? undefined,
+				createdAt,
+				updatedAt: ms(s.updateTime) || createdAt || 0,
+				attachments: (s.attachments ?? []).map(clean)
+			};
+		})
 	};
 }
 
@@ -416,6 +434,35 @@ function cullPreLazyContent() {
 			rows.map((r) => ({ type: 'delete' as const, key: r.id, value: r }))
 		);
 	setMeta('archivedLazyCleanupV1', 1);
+}
+
+/**
+ * One-time repair for rows stored before web/session posts mirrored
+ * creationTime into updateTime: those rows sit at updatedAt 0, so the
+ * course stream (ordered by updatedAt desc) renders stale posts on top.
+ * Rewrites updatedAt from createdAt and broadcasts the updates so live
+ * queries reorder; future writes are fixed in shapeContent/postBase.
+ */
+function backfillUpdatedAt(publishFn: (collection: CollectionName, changes: Change[]) => void) {
+	if (getMeta<number>('updatedAtBackfillV1')) return;
+	const tables = ['courses', 'courseWork', 'materials', 'announcements', 'submissions'] as const;
+	for (const table of tables) {
+		const stale = listAll(table).filter((r) => r.updatedAt === 0 && (r.createdAt ?? 0) > 0);
+		if (stale.length === 0) continue;
+		const d = db();
+		const update = d.query(`UPDATE ${table} SET data = ? WHERE id = ?`);
+		const changes: Change[] = [];
+		d.transaction(() => {
+			for (const row of stale) {
+				const createdAt = row.createdAt ?? 0;
+				const next = { ...row, updatedAt: createdAt };
+				update.run(JSON.stringify(next), row.id);
+				changes.push({ type: 'update' as const, key: row.id, value: next });
+			}
+		})();
+		publishFn(table, changes);
+	}
+	setMeta('updatedAtBackfillV1', 1);
 }
 
 /** Fetch content for one archived/hidden course on demand. Bypasses the lazy filter. */
