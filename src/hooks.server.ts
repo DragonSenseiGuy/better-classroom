@@ -12,7 +12,7 @@ import {
 	VAPID_PUBLIC_KEY,
 	VAPID_SUBJECT
 } from '$app/env/private';
-import { auth } from '#lib/server/auth.ts';
+import { getAuth } from '#lib/server/auth.ts';
 import { configure, registerSourceCheck } from '#lib/server/config.ts';
 import { appsScriptProvider } from '#lib/server/apps-script.ts';
 import { webRecordsProvider } from '#lib/server/web-records.ts';
@@ -44,7 +44,7 @@ export const init: ServerInit = async () => {
 		// deploy step that can run `bun run auth:migrate`. Create the Better Auth
 		// tables on cold start instead (a no-op when they already exist).
 		// Skipped during `vite build` route analysis, which only imports this module.
-		await (await auth.$context).runMigrations();
+		await (await getAuth().$context).runMigrations();
 	}
 	startScheduler();
 };
@@ -52,6 +52,7 @@ export const init: ServerInit = async () => {
 const PUBLIC = /^\/(login|privacy|api\/auth)(\/|$)/;
 
 export const handle: Handle = async ({ event, resolve }) => {
+	const auth = getAuth();
 	const session = await auth.api.getSession({ headers: event.request.headers });
 	event.locals.user = session?.user ?? null;
 	event.locals.session = session?.session ?? null;

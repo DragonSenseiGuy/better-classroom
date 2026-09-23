@@ -63,7 +63,7 @@ type RawDb = BunSqliteDatabase | DatabaseSync;
 // same file would race the first for the write lock, so connections live on
 // globalThis and survive the module instance that opened them.
 const shared = globalThis as typeof globalThis & {
-	__classroomAuthRaw?: RawDb;
+	__classroomAuthDbs?: Map<string, RawDb>;
 	__classroomUserDbs?: ReturnType<typeof perUser<AppDatabase>>;
 };
 
@@ -121,8 +121,20 @@ function toApp(database: RawDb): AppDatabase {
 	return isBun ? (database as AppDatabase) : wrapNode(database as DatabaseSync);
 }
 
+const authDbs = (shared.__classroomAuthDbs ??= new Map<string, RawDb>());
+
 function rawAuthDb(): RawDb {
-	return (shared.__classroomAuthRaw ??= openRaw(config.databasePath));
+	// Keyed by path: configure() runs in ServerInit, after module imports
+	// have already created the auth instance against the default path. A
+	// single cached handle would pin Better Auth to that stale file while
+	// migrations and per-user caches use the configured DATABASE_PATH.
+	const path = config.databasePath;
+	let database = authDbs.get(path);
+	if (!database) {
+		database = openRaw(path);
+		authDbs.set(path, database);
+	}
+	return database;
 }
 
 /** The shared database at DATABASE_PATH; Better Auth owns its tables here. */
