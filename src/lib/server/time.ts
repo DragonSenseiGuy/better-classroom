@@ -4,6 +4,19 @@ export function ms(iso: string | undefined): number {
 	return Number.isFinite(t) ? t : 0;
 }
 
+/**
+ * updateTime is absent on unedited rows from every source (the web stream
+ * exposes creation time only), so fall back to creationTime. Never emits 0
+ * when creation is known: the stream, inbox and search all sort by
+ * updatedAt, and 0-rows tie and surface stale posts on top.
+ */
+export function updatedAtMs(
+	creationTime: string | undefined,
+	updateTime: string | undefined
+): number {
+	return ms(updateTime) || ms(creationTime);
+}
+
 export function dueAt(
 	date?: { year?: number; month?: number; day?: number },
 	time?: { hours?: number; minutes?: number }

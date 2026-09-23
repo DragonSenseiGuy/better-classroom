@@ -32,7 +32,7 @@ import {
 } from './store';
 import { db, listUserIds } from './db';
 import { perUser, runAs } from './tenant';
-import { dueAt, ms } from './time';
+import { dueAt, ms, updatedAtMs } from './time';
 import type { Attachment, Change, CollectionName, SyncStatus, Teacher } from '#lib/shared/types.ts';
 import { handInBlocker } from '#lib/shared/hand-in.ts';
 
@@ -137,7 +137,7 @@ async function doSync(options: { full?: boolean }) {
 				alternateLink: c.alternateLink ?? undefined,
 				calendarId: c.calendarId ?? undefined,
 				createdAt,
-				updatedAt: ms(c.updateTime) || createdAt,
+				updatedAt: updatedAtMs(c.creationTime, c.updateTime),
 				teachers: c.teachers?.map(person)
 			};
 		});
@@ -227,10 +227,9 @@ const clean = (a: Attachment) => ({
 });
 
 export function shapeContent(courseId: string, raw: RawCourseContent) {
-	// Web/session posts carry creationTime only (no reliable updateTime).
-	// The course stream, inbox and search all sort by updatedAt, so fall
-	// back to creationTime — otherwise those rows land at updatedAt 0 and
-	// sort as ties (stale posts on top).
+	// updatedAt falls back to creationTime (see updatedAtMs): sources such
+	// as the web stream carry no updateTime, and 0-rows tie in the
+	// updatedAt-desc orderings (stream, inbox, search).
 	return {
 		courseWork: (raw.courseWork ?? []).map((w) => {
 			const due = dueAt(w.dueDate, w.dueTime);
@@ -243,7 +242,7 @@ export function shapeContent(courseId: string, raw: RawCourseContent) {
 				materials: (w.materials ?? []).map(clean),
 				alternateLink: w.alternateLink ?? undefined,
 				createdAt,
-				updatedAt: ms(w.updateTime) || createdAt,
+				updatedAt: updatedAtMs(w.creationTime, w.updateTime),
 				dueAt: due.dueAt,
 				hasDueTime: due.hasDueTime,
 				maxPoints: w.maxPoints ?? undefined,
@@ -262,7 +261,7 @@ export function shapeContent(courseId: string, raw: RawCourseContent) {
 				materials: (m.materials ?? []).map(clean),
 				alternateLink: m.alternateLink ?? undefined,
 				createdAt,
-				updatedAt: ms(m.updateTime) || createdAt,
+				updatedAt: updatedAtMs(m.creationTime, m.updateTime),
 				topicId: m.topicId ?? undefined,
 				creatorUserId: m.creatorUserId ?? undefined
 			};
@@ -276,7 +275,7 @@ export function shapeContent(courseId: string, raw: RawCourseContent) {
 				materials: (a.materials ?? []).map(clean),
 				alternateLink: a.alternateLink ?? undefined,
 				createdAt,
-				updatedAt: ms(a.updateTime) || createdAt,
+				updatedAt: updatedAtMs(a.creationTime, a.updateTime),
 				creatorUserId: a.creatorUserId ?? undefined
 			};
 		}),
@@ -299,7 +298,7 @@ export function shapeContent(courseId: string, raw: RawCourseContent) {
 				alternateLink: s.alternateLink ?? undefined,
 				courseWorkType: s.courseWorkType ?? undefined,
 				createdAt,
-				updatedAt: ms(s.updateTime) || createdAt || 0,
+				updatedAt: updatedAtMs(s.creationTime, s.updateTime),
 				attachments: (s.attachments ?? []).map(clean)
 			};
 		})
@@ -444,11 +443,10 @@ function cullPreLazyContent() {
 }
 
 /**
- * One-time repair for rows stored before web/session posts mirrored
- * creationTime into updateTime: those rows sit at updatedAt 0, so the
- * course stream (ordered by updatedAt desc) renders stale posts on top.
- * Rewrites updatedAt from createdAt and broadcasts the updates so live
- * queries reorder; future writes are fixed in shapeContent/postBase.
+ * One-time repair for rows stored with updatedAt 0 (sources that carry
+ * creationTime only): the course stream (ordered by updatedAt desc) renders
+ * those stale posts on top. Rewrites updatedAt from createdAt and broadcasts
+ * the updates so live queries reorder; future writes fall back in shapeContent.
  */
 function backfillUpdatedAt(publishFn: (collection: CollectionName, changes: Change[]) => void) {
 	if (getMeta<number>('updatedAtBackfillV1')) return;
