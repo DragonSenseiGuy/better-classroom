@@ -12,6 +12,7 @@ import {
 	getMeta,
 	hideCourse,
 	listByCourse,
+	setCourseOrder,
 	setCoursePrefs,
 	setMeta,
 	snapshot,
@@ -163,5 +164,31 @@ test('snapshot keeps archived names with their on-demand content', () => {
 		});
 		expect(snap.courses.find((c) => c.id === 'snap1')?.archived).toBe(true);
 		expect(snap.announcements.filter((a) => a.courseId === 'snap1').length).toBe(1);
+	});
+});
+
+test('applyCourses preserves order and appends new courses at the end', () => {
+	runAs('store-test-order', () => {
+		applyCourses([course('o1'), course('o2')]);
+		const before = [getCourse('o1')?.sortOrder, getCourse('o2')?.sortOrder];
+		expect(before[0]).toBeLessThan(before[1]!);
+		applyCourses([course('o1', 'Renamed'), course('o2'), course('o3')]);
+		expect(getCourse('o1')?.sortOrder).toBe(before[0]);
+		expect(getCourse('o2')?.sortOrder).toBe(before[1]);
+		expect(getCourse('o3')?.sortOrder).toBeGreaterThan(before[1]!);
+	});
+});
+
+test('setCourseOrder reorders atomically and ignores unknown ids', () => {
+	runAs('store-test-reorder', () => {
+		applyCourses([course('r1'), course('r2'), course('r3')]);
+		const changes = setCourseOrder(['r3', 'r1', 'r2', 'missing']);
+		expect(changes.map((c) => [c.key, c.value.sortOrder])).toEqual([
+			['r3', 0],
+			['r1', 1],
+			['r2', 2]
+		]);
+		expect(setCourseOrder(['r3', 'r1', 'r2'])).toEqual([]);
+		expect(setCourseOrder([])).toEqual([]);
 	});
 });

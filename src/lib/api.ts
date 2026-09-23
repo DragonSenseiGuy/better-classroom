@@ -36,6 +36,9 @@ export const setDismissed = (ids: string[], dismissed: boolean) =>
 export const setCoursePrefs = (id: string, patch: CoursePrefs) =>
 	api.post(`/api/courses/${id}/prefs`, patch);
 
+export const setCourseOrder = (ids: string[]) =>
+	api.post<{ courses: Course[] }>('/api/courses/order', { ids });
+
 export const syncSingleCourse = (id: string) =>
 	api.post<{ course: Course }>(`/api/courses/${id}/sync`, {});
 

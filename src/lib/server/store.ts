@@ -248,7 +248,7 @@ export function clearCourseContent(courseId: string): void {
 export function applyCourses(
 	courses: (Omit<
 		Course,
-		'archived' | 'lastSyncedAt' | 'nickname' | 'color' | 'hidden' | 'teachers'
+		'archived' | 'lastSyncedAt' | 'nickname' | 'color' | 'hidden' | 'sortOrder' | 'teachers'
 	> & {
 		teachers?: Teacher[];
 	})[]
@@ -271,6 +271,9 @@ export function applyCourses(
 	};
 	d.transaction(() => {
 		const seen = new Set<string>();
+		let nextOrder = 0;
+		for (const c of existing.values())
+			if (typeof c.sortOrder === 'number') nextOrder = Math.max(nextOrder, c.sortOrder + 1);
 		for (const c of courses) {
 			seen.add(c.id);
 			const prev = existing.get(c.id);
@@ -287,7 +290,8 @@ export function applyCourses(
 					lastSyncedAt: prev?.lastSyncedAt,
 					nickname: prev?.nickname,
 					color: prev?.color,
-					hidden: prev?.hidden ?? false
+					hidden: prev?.hidden ?? false,
+					sortOrder: prev?.sortOrder ?? nextOrder++
 				},
 				prev
 			);
@@ -309,6 +313,29 @@ export function setCoursePrefs(courseId: string, patch: CoursePrefs) {
 		color: patch.color === undefined ? prev.color : (patch.color ?? undefined),
 		hidden: patch.hidden ?? prev.hidden ?? false
 	}));
+}
+
+/**
+ * Persists a sidebar ordering atomically: the ids array is the desired
+ * front-to-back order for one section (visible or archived). Unknown ids
+ * are ignored; courses omitted from the list keep their existing sortOrder.
+ * Callers pass the full section so relative order within the section is
+ * exactly the array order.
+ */
+export function setCourseOrder(ids: string[]): Change<Course>[] {
+	const d = db();
+	return d.transaction(() => {
+		const ordered = [...new Set(ids.filter((id) => typeof id === 'string' && id))];
+		if (!ordered.length) return [];
+		const changes: Change<Course>[] = [];
+		ordered.forEach((id, index) => {
+			const change = updateCourse(id, (prev) =>
+				prev.sortOrder === index ? prev : { ...prev, sortOrder: index }
+			);
+			if (change) changes.push(change);
+		});
+		return changes;
+	})();
 }
 
 /**

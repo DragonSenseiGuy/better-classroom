@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { useLiveQuery } from '@tanstack/svelte-db';
 	import { courses } from '#lib/db/collections.ts';
-	import { byDisplayName, displayName, isArchived } from '#lib/course.ts';
+	import { byCourseOrder, displayName, isArchived } from '#lib/course.ts';
 	import { setCourseHidden } from '#lib/course-actions.ts';
 	import { goto } from '$app/navigation';
 	import CourseDot from '#lib/components/course-dot.svelte';
@@ -13,7 +13,7 @@
 	import EyeIcon from '@lucide/svelte/icons/eye';
 
 	const archivedQuery = useLiveQuery({ query: (q) => q.from({ c: courses }) });
-	const archived = $derived(archivedQuery.data.filter(isArchived).sort(byDisplayName));
+	const archived = $derived(archivedQuery.data.filter(isArchived).sort(byCourseOrder));
 
 	// The course page owns fetching: it also handles direct URLs, refreshes
 	// and sidebar clicks, so this list just navigates.

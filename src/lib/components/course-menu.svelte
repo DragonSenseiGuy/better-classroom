@@ -9,12 +9,22 @@
 	import EyeOffIcon from '@lucide/svelte/icons/eye-off';
 	import ExternalLinkIcon from '@lucide/svelte/icons/external-link';
 	import RotateCcwIcon from '@lucide/svelte/icons/rotate-ccw';
+	import ArrowUpIcon from '@lucide/svelte/icons/arrow-up';
+	import ArrowDownIcon from '@lucide/svelte/icons/arrow-down';
 
 	let {
 		course,
 		onRename,
+		onMoveUp,
+		onMoveDown,
 		children
-	}: { course: Course; onRename: (course: Course) => void; children: Snippet } = $props();
+	}: {
+		course: Course;
+		onRename: (course: Course) => void;
+		onMoveUp?: () => void;
+		onMoveDown?: () => void;
+		children: Snippet;
+	} = $props();
 
 	const hide = () => setCourseHidden(course, true, 'Find it again under Archived.');
 
@@ -35,6 +45,12 @@
 		<ContextMenu.Item onSelect={() => onRename(course)}
 			><PencilIcon />Rename or recolor…</ContextMenu.Item
 		>
+		{#if onMoveUp}
+			<ContextMenu.Item onSelect={onMoveUp}><ArrowUpIcon />Move up</ContextMenu.Item>
+		{/if}
+		{#if onMoveDown}
+			<ContextMenu.Item onSelect={onMoveDown}><ArrowDownIcon />Move down</ContextMenu.Item>
+		{/if}
 		{#if course.nickname}
 			<ContextMenu.Item onSelect={resetName}><RotateCcwIcon />Use original name</ContextMenu.Item>
 		{/if}

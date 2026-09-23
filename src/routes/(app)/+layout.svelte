@@ -4,7 +4,7 @@
 	import { goto } from '$app/navigation';
 	import { createHotkey, createHotkeySequence } from '@tanstack/svelte-hotkeys';
 	import { DbProvider, useLiveQuery } from '@tanstack/svelte-db';
-	import { byDisplayName, isArchived, isVisible } from '#lib/course.ts';
+	import { byCourseOrder, isArchived, isVisible } from '#lib/course.ts';
 	import * as Sidebar from '#lib/components/ui/sidebar/index.js';
 	import * as Breadcrumb from '#lib/components/ui/breadcrumb/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
@@ -52,8 +52,8 @@
 		query: (q) => q.from({ c: coursesCollection })
 	});
 	$effect(() => syncColorOverrides(allCoursesQuery.data));
-	const courses = $derived(allCoursesQuery.data.filter(isVisible).sort(byDisplayName));
-	const archivedCourses = $derived(allCoursesQuery.data.filter(isArchived).sort(byDisplayName));
+	const courses = $derived(allCoursesQuery.data.filter(isVisible).sort(byCourseOrder));
+	const archivedCourses = $derived(allCoursesQuery.data.filter(isArchived).sort(byCourseOrder));
 	const courseById = $derived(new Map(allCoursesQuery.data.map((c) => [c.id, c])));
 	$effect(() => void initNotifications());
 	$effect(() => watchForNewItems((id) => courseById.get(id)));
@@ -101,7 +101,7 @@
 	<Sidebar.Provider>
 		<AppSidebar
 			{courses}
-			archivedCourses={archivedCourses}
+			{archivedCourses}
 			{inboxCount}
 			{todoCount}
 			profile={data.snapshot.profile ?? { name: data.user?.name, email: data.user?.email }}

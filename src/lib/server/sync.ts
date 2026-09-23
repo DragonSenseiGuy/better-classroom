@@ -23,6 +23,7 @@ import {
 	setMeta,
 	setProfile,
 	setCoursePrefs,
+	setCourseOrder,
 	setDismissed,
 	touchCourseSynced,
 	CONTENT_TABLE_LIST,
@@ -412,6 +413,12 @@ export function updateCoursePrefs(courseId: string, patch: CoursePrefs) {
 		rebuildSearchIndex();
 	}
 	return change?.value ?? getCourse(courseId);
+}
+
+export function updateCourseOrder(ids: string[]) {
+	const changes = setCourseOrder(ids);
+	if (changes.length) publish('courses', changes);
+	return changes.map((c) => c.value);
 }
 
 /**

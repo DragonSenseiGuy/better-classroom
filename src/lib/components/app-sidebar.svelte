@@ -5,6 +5,7 @@
 	import { page } from '$app/state';
 	import { afterNavigate } from '$app/navigation';
 	import { displayName, type CourseRef as Course } from '#lib/course.ts';
+	import { createCourseOrder, type OrderSection } from '#lib/course-reorder.svelte.ts';
 	import CourseDot from '#lib/components/course-dot.svelte';
 	import CourseMenu from '#lib/components/course-menu.svelte';
 	import { editCourse } from '#lib/course-editor.svelte.ts';
@@ -13,7 +14,6 @@
 	import InboxIcon from '@lucide/svelte/icons/inbox';
 	import SearchIcon from '@lucide/svelte/icons/search';
 	import SettingsIcon from '@lucide/svelte/icons/settings';
-	import GraduationCapIcon from '@lucide/svelte/icons/graduation-cap';
 	import ArchiveIcon from '@lucide/svelte/icons/archive';
 
 	type Profile = { name?: string; email?: string; photoUrl?: string } | null;
@@ -38,6 +38,11 @@
 	afterNavigate(() => sidebar.setOpenMobile(false));
 	const closeOnMobile = () => sidebar.isMobile && sidebar.setOpenMobile(false);
 
+	const order = createCourseOrder(
+		() => courses,
+		() => archivedCourses
+	);
+
 	const nav = $derived([
 		{ href: '/', label: 'Home', icon: HouseIcon, count: 0 },
 		{ href: '/inbox', label: 'Inbox', icon: InboxIcon, count: inboxCount },
@@ -47,16 +52,37 @@
 		href === '/' ? page.url.pathname === '/' : page.url.pathname.startsWith(href);
 </script>
 
-{#snippet courseRows(list: Course[], dimmed = false)}
-	{#each list as course (course.id)}
-		<Sidebar.MenuItem>
-			<CourseMenu {course} onRename={editCourse}>
+{#snippet courseRows(section: OrderSection, dimmed = false)}
+	{@const rows = order.ordered(section)}
+	{#each rows as course, index (course.id)}
+		<Sidebar.MenuItem
+			draggable="true"
+			aria-grabbed={order.dragId === course.id}
+			class={order.overId === course.id && order.dragSection === section
+				? 'rounded-md ring-1 ring-sidebar-ring'
+				: undefined}
+			ondragstart={(e) => order.dragStart(section, course.id, e)}
+			ondragover={(e) => order.dragOver(section, course.id, e)}
+			ondrop={(e) => order.drop(section, course.id, e)}
+			ondragend={order.dragEnd}
+		>
+			<CourseMenu
+				{course}
+				onRename={editCourse}
+				onMoveUp={index > 0 ? () => order.move(section, course.id, -1) : undefined}
+				onMoveDown={index < rows.length - 1 ? () => order.move(section, course.id, 1) : undefined}
+			>
 				<Sidebar.MenuButton
 					isActive={page.url.pathname.startsWith(`/courses/${course.id}`)}
 					tooltipContent={displayName(course)}
 				>
 					{#snippet child({ props })}
-						<a href={`/courses/${course.id}`} {...props} class:opacity-70={dimmed}>
+						<a
+							href={`/courses/${course.id}`}
+							{...props}
+							class:opacity-70={dimmed}
+							title="Drag to reorder"
+						>
 							<CourseDot id={course.id} size="md" class="shrink-0" />
 							<span>{displayName(course)}</span>
 						</a>
@@ -104,8 +130,14 @@
 		<Sidebar.Group>
 			<Sidebar.GroupLabel>Courses</Sidebar.GroupLabel>
 			<Sidebar.GroupContent>
-				<Sidebar.Menu>
-					{@render courseRows(courses)}
+				<Sidebar.Menu
+					aria-label="Courses, drag to reorder"
+					ondragover={(e) => {
+						if (order.dragId && order.dragSection === 'visible') e.preventDefault();
+					}}
+					ondrop={(e) => order.dropAtEnd('visible', e)}
+				>
+					{@render courseRows('visible')}
 					{#if courses.length === 0}
 						<Sidebar.MenuItem>
 							<Sidebar.MenuButton>
@@ -135,8 +167,14 @@
 					{/snippet}
 				</Sidebar.GroupLabel>
 				<Sidebar.GroupContent>
-					<Sidebar.Menu>
-						{@render courseRows(archivedCourses, true)}
+					<Sidebar.Menu
+						aria-label="Archived courses, drag to reorder"
+						ondragover={(e) => {
+							if (order.dragId && order.dragSection === 'archived') e.preventDefault();
+						}}
+						ondrop={(e) => order.dropAtEnd('archived', e)}
+					>
+						{@render courseRows('archived', true)}
 					</Sidebar.Menu>
 				</Sidebar.GroupContent>
 			</Sidebar.Group>

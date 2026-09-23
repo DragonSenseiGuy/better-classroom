@@ -32,6 +32,7 @@ export type Course = {
 	nickname?: string;
 	color?: string;
 	hidden: boolean;
+	sortOrder?: number;
 };
 
 export type CourseWork = {
