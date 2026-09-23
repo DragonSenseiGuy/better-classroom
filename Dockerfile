@@ -22,6 +22,10 @@ COPY --from=build /app/scripts/auth-migrate.ts ./scripts/auth-migrate.ts
 
 RUN mkdir -p /app/data
 
+# The auth database and per-user caches live here; mount it somewhere durable
+# or accounts vanish on redeploy.
+VOLUME ["/app/data"]
+
 EXPOSE 7007
 
 CMD ["sh", "-c", "bun scripts/auth-migrate.ts && bun build/index.js"]
