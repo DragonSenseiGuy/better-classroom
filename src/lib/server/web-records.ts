@@ -119,13 +119,18 @@ async function overview(since: number): Promise<RawOverview> {
 
 function postBase(courseId: string, item: StreamItem, path: string) {
 	// The stream exposes creation time only; creationTime is the honest
-	// field. Edits to existing posts surface on full syncs, not incremental
-	// filters.
+	// field. The course page orders the stream by updatedAt, so mirror
+	// creation into updateTime — otherwise every web post lands at
+	// updatedAt 0 and the ordering collapses to insertion order (stale
+	// posts on top). Edits to existing posts still surface on full syncs,
+	// not incremental filters.
+	const creationTime = item.createdAt ? new Date(item.createdAt).toISOString() : undefined;
 	return {
 		id: item.id,
 		materials: [],
 		alternateLink: `${courseUrl(courseId)}/${path}`,
-		creationTime: item.createdAt ? new Date(item.createdAt).toISOString() : undefined,
+		creationTime,
+		updateTime: creationTime,
 		creatorUserId: item.creatorId
 	};
 }
