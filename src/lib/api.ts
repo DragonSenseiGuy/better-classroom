@@ -45,12 +45,21 @@ export const syncSingleCourse = (id: string) =>
 export const submitWork = (action: SubmissionAction, ref: WorkRef & { submissionId?: string }) =>
 	api.post('/api/submissions', { action, ...ref });
 
-export const comments = {
-	list: (ref: WorkRef) =>
-		api.get<{ comments: Comment[] }>('/api/comments', ref).then((r) => r.comments),
-	post: (ref: WorkRef, text: string) => api.post('/api/comments', { ...ref, text }),
-	remove: (ref: WorkRef, commentId: string) => api.del('/api/comments', { ...ref, commentId })
+export type CommentClient = {
+	list: (ref: WorkRef) => Promise<Comment[]>;
+	post: (ref: WorkRef, text: string) => Promise<unknown>;
+	remove: (ref: WorkRef, commentId: string) => Promise<unknown>;
 };
+
+const commentClient = (path: string): CommentClient => ({
+	list: (ref: WorkRef) => api.get<{ comments: Comment[] }>(path, ref).then((r) => r.comments),
+	post: (ref: WorkRef, text: string) => api.post(path, { ...ref, text }),
+	remove: (ref: WorkRef, commentId: string) => api.del(path, { ...ref, commentId })
+});
+
+export const comments = commentClient('/api/comments');
+
+export const classComments = commentClient('/api/class-comments');
 
 const files = (r: { files: SubmissionFile[] }) => r.files;
 

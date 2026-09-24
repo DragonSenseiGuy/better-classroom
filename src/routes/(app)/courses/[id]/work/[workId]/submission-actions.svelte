@@ -47,7 +47,13 @@
 			{#if acting === 'turnIn'}<LoaderIcon data-icon="inline-start" class="animate-spin" />{/if}
 			{submission.attachments.length ? 'Hand in' : 'Mark as done'}
 		</Button>
-	{:else if work.status === 'turnedIn'}
+	{:else if work.status === 'turnedIn' || work.status === 'returned' || work.status === 'graded'}
+		{#if work.status !== 'turnedIn'}
+			<Button size="sm" onclick={() => submit('turnIn')} disabled={acting !== null}>
+				{#if acting === 'turnIn'}<LoaderIcon data-icon="inline-start" class="animate-spin" />{/if}
+				Resubmit
+			</Button>
+		{/if}
 		<Button
 			variant="outline"
 			size="sm"

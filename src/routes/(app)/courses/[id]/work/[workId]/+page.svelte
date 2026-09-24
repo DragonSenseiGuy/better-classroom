@@ -17,7 +17,8 @@
 	import FactsGrid from './facts-grid.svelte';
 	import SubmissionFiles from './submission-files.svelte';
 	import SubmissionActions from './submission-actions.svelte';
-	import PrivateComments from './private-comments.svelte';
+	import CommentsSection from './comments-section.svelte';
+	import { classComments as classCommentsApi, comments as commentsApi } from '#lib/api.ts';
 
 	const row = useLiveQuery({
 		query: (q) =>
@@ -34,6 +35,16 @@
 		row.data ? summarize(row.data.w, row.data.s ?? undefined, displayName(row.data.c)) : null
 	);
 	const sub = $derived(row.data?.s ?? null);
+	// applyCourses always persists a teachers array, so direct access is safe.
+	const teacherName = $derived(row.data?.c.teachers[0]?.name);
+	const privatePlaceholder = $derived(
+		teacherName ? `Add comment to ${teacherName}…` : 'Add a private comment for your teacher…'
+	);
+	const classFallback = $derived(
+		w?.alternateLink
+			? { label: 'Read them in Classroom', href: w.alternateLink }
+			: undefined
+	);
 	const dueText = $derived(
 		!w || w.dueAt === undefined
 			? 'No due date'
@@ -96,33 +107,60 @@
 				<h2 class="mt-8 text-base font-semibold tracking-tight">Attachments</h2>
 				<div class="mt-2 max-w-lg"><Attachments items={w.materials} /></div>
 			{/if}
+			<div class="mt-8 max-w-lg">
+				<CommentsSection
+					title="Class comments"
+					work={w}
+					client={classCommentsApi}
+					placeholder="Add a class comment…"
+					fallback={classFallback}
+				/>
+			</div>
 		</div>
 		<aside>
-			<h2 class="text-base font-semibold tracking-tight">Your work</h2>
+			<div class="flex items-baseline justify-between gap-2">
+				<h2 class="text-base font-semibold tracking-tight">Your work</h2>
+				<span class="text-sm text-muted-foreground">{statusLabel[w.status]}</span>
+			</div>
 			{#if sub}
 				<p class="mt-1 text-sm text-muted-foreground">
-					{statusLabel[w.status]}{#if sub.late}
-						· late{/if} · updated {formatRelative(sub.updatedAt)}
+					{#if sub.late}late · {/if}updated {formatRelative(sub.updatedAt)}
 				</p>
-				{#if w.assignedGrade !== undefined && w.maxPoints}
+				{#if w.assignedGrade !== undefined || w.draftGrade !== undefined}
 					<div class="mt-4">
 						<div class="flex items-baseline justify-between text-sm">
-							<span class="text-muted-foreground">Grade</span>
+							<span class="text-muted-foreground"
+								>{w.assignedGrade !== undefined ? 'Grade' : 'Draft grade'}</span
+							>
 							<span class="font-medium tabular-nums"
-								>{w.assignedGrade}<span class="text-muted-foreground">/{w.maxPoints}</span></span
+								>{w.assignedGrade ?? w.draftGrade}{#if w.maxPoints}<span
+										class="text-muted-foreground">/{w.maxPoints}</span
+									>{/if}</span
 							>
 						</div>
-						<Progress value={gradePercent(w) ?? 0} class="mt-2" />
+						{#if w.assignedGrade !== undefined && w.maxPoints}
+							<Progress value={gradePercent(w) ?? 0} class="mt-2" />
+						{/if}
 					</div>
 				{/if}
-				<Separator class="my-4" />
-				<SubmissionFiles work={w} fallback={sub.attachments} />
-				<SubmissionActions work={w} submission={sub} />
-				<Separator class="my-6" />
-				<PrivateComments work={w} />
 			{:else}
-				<p class="mt-1 text-sm text-muted-foreground">No submission record yet.</p>
+				<p class="mt-1 text-sm text-muted-foreground">
+					No submission record yet. Files and comments below load live from Classroom when a
+					session is connected.
+				</p>
 			{/if}
+			<Separator class="my-4" />
+			<SubmissionFiles work={w} fallback={sub?.attachments ?? []} />
+			{#if sub}
+				<SubmissionActions work={w} submission={sub} />
+			{/if}
+			<Separator class="my-6" />
+			<CommentsSection
+				title="Private comments"
+				work={w}
+				client={commentsApi}
+				placeholder={privatePlaceholder}
+			/>
 		</aside>
 	</div>
 {/if}
