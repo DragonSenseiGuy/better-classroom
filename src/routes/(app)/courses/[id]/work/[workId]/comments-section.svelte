@@ -1,15 +1,28 @@
 <script lang="ts">
-	import { comments as commentsApi, errorMessage } from '#lib/api.ts';
+	import { errorMessage, type CommentClient } from '#lib/api.ts';
 	import type { WorkSummary } from '#lib/work.ts';
 	import { notify } from '#lib/toast.ts';
 	import { formatRelative } from '#lib/format.ts';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import RichText from '#lib/components/rich-text.svelte';
 	import type { Comment } from '#lib/shared/types.ts';
+	import ExternalLinkIcon from '@lucide/svelte/icons/external-link';
 	import LoaderIcon from '@lucide/svelte/icons/loader-circle';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 
-	let { work }: { work: WorkSummary } = $props();
+	let {
+		title,
+		work,
+		client,
+		placeholder,
+		fallback
+	}: {
+		title: string;
+		work: WorkSummary;
+		client: CommentClient;
+		placeholder: string;
+		fallback?: { label: string; href: string };
+	} = $props();
 
 	const ref = $derived({ courseId: work.courseId, workId: work.id });
 
@@ -22,7 +35,7 @@
 	async function loadComments() {
 		commentsError = null;
 		try {
-			comments = await commentsApi.list(ref);
+			comments = await client.list(ref);
 		} catch (err) {
 			commentsError = errorMessage(err);
 			comments = [];
@@ -33,7 +46,7 @@
 		if (!commentDraft.trim()) return;
 		posting = true;
 		try {
-			await commentsApi.post(ref, commentDraft.trim());
+			await client.post(ref, commentDraft.trim());
 			commentDraft = '';
 			await loadComments();
 		} catch (err) {
@@ -46,7 +59,7 @@
 	async function removeComment(id: string) {
 		removing = id;
 		try {
-			await commentsApi.remove(ref, id);
+			await client.remove(ref, id);
 			comments = (comments ?? []).filter((c) => c.id !== id);
 		} catch (err) {
 			notify('rose', 'Could not delete comment', { description: errorMessage(err) });
@@ -60,9 +73,21 @@
 	});
 </script>
 
-<h2 class="text-base font-semibold tracking-tight">Private comments</h2>
+<h2 class="text-base font-semibold tracking-tight">{title}</h2>
 {#if commentsError}
 	<p class="mt-2 text-sm text-muted-foreground">{commentsError}</p>
+	{#if fallback}
+		<Button
+			variant="outline"
+			size="sm"
+			class="mt-2"
+			href={fallback.href}
+			target="_blank"
+			rel="noreferrer"
+		>
+			{fallback.label} <ExternalLinkIcon data-icon="inline-end" />
+		</Button>
+	{/if}
 {:else if comments === null}
 	<p class="mt-2 text-sm text-muted-foreground">Loading…</p>
 {:else if comments.length === 0}
@@ -104,7 +129,7 @@
 		<textarea
 			bind:value={commentDraft}
 			rows="2"
-			placeholder="Add a private comment for your teacher…"
+			placeholder={placeholder}
 			class="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
 		></textarea>
 		<div class="flex justify-end">

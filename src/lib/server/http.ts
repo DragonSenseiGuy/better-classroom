@@ -13,7 +13,7 @@ export function workIds(url: URL) {
 	return { courseId, workId };
 }
 
-export function requireEnricher<K extends 'comments' | 'attachments'>(
+export function requireEnricher<K extends 'comments' | 'attachments' | 'classComments'>(
 	feature: K,
 	label: string
 ): NonNullable<Enricher[K]> {
