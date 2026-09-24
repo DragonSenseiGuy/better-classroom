@@ -2,13 +2,31 @@
 
 /** Move `activeId` to just before `overId`. Returns the original array when noop. */
 export function moveBefore(ids: string[], activeId: string, overId: string): string[] {
+	return moveToPosition(ids, activeId, overId, 'before');
+}
+
+export type DropPosition = 'before' | 'after';
+
+/**
+ * Move `activeId` to just before/after `overId`. Returns the original array
+ * when noop (same id, unknown ids, or already in that exact spot).
+ */
+export function moveToPosition(
+	ids: string[],
+	activeId: string,
+	overId: string,
+	position: DropPosition
+): string[] {
 	if (activeId === overId) return ids;
 	const from = ids.indexOf(activeId);
 	const to = ids.indexOf(overId);
 	if (from === -1 || to === -1) return ids;
-	const next = ids.filter((id) => id !== activeId);
-	const insertAt = next.indexOf(overId);
+	const without = ids.filter((id) => id !== activeId);
+	const overIndex = without.indexOf(overId);
+	const insertAt = position === 'before' ? overIndex : overIndex + 1;
+	const next = [...without];
 	next.splice(insertAt, 0, activeId);
+	if (next.every((id, i) => id === ids[i])) return ids;
 	return next;
 }
 

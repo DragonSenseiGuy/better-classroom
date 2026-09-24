@@ -19,6 +19,7 @@
 	import SettingsIcon from '@lucide/svelte/icons/settings';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import ArchiveIcon from '@lucide/svelte/icons/archive';
+	import GripVerticalIcon from '@lucide/svelte/icons/grip-vertical';
 
 	type Profile = { name?: string; email?: string; photoUrl?: string } | null;
 
@@ -75,40 +76,72 @@
 {#snippet courseRows(section: OrderSection, dimmed = false)}
 	{@const rows = order.ordered(section)}
 	{#each rows as course, index (course.id)}
+		{@const isDragging = order.dragId === course.id}
+		{@const isOver = order.overId === course.id && order.dragSection === section}
 		<Sidebar.MenuItem
-			draggable="true"
-			aria-grabbed={order.dragId === course.id}
-			class={order.overId === course.id && order.dragSection === section
-				? 'rounded-md ring-1 ring-sidebar-ring'
-				: undefined}
-			ondragstart={(e) => order.dragStart(section, course.id, e)}
+			class={cn('flex items-center gap-0.5', isDragging && 'opacity-50')}
 			ondragover={(e) => order.dragOver(section, course.id, e)}
 			ondrop={(e) => order.drop(section, course.id, e)}
-			ondragend={order.dragEnd}
+			ondragleave={(e) => order.dragLeave(course.id, e)}
 		>
-			<CourseMenu
-				{course}
-				onRename={editCourse}
-				onMoveUp={index > 0 ? () => order.move(section, course.id, -1) : undefined}
-				onMoveDown={index < rows.length - 1 ? () => order.move(section, course.id, 1) : undefined}
+			<!-- Insertion indicator: top/bottom edge based on pointer half. -->
+			{#if isOver}
+				<span
+					aria-hidden="true"
+					class={cn(
+						'pointer-events-none absolute right-1 left-6 h-0.5 rounded-full bg-sidebar-ring',
+						order.dropPosition === 'after' ? 'bottom-0' : 'top-0'
+					)}
+				></span>
+			{/if}
+			<span
+				role="button"
+				tabindex="0"
+				draggable="true"
+				title="Drag to reorder"
+				aria-label={`Reorder ${displayName(course)}. Press arrow keys to move.`}
+				aria-grabbed={isDragging}
+				class="flex shrink-0 cursor-grab touch-none items-center justify-center rounded p-0.5 text-sidebar-foreground/40 opacity-60 transition-opacity focus-visible:opacity-100 active:cursor-grabbing md:opacity-0 md:group-hover/menu-item:opacity-100 md:focus-visible:opacity-100 [&_svg]:size-3.5"
+				ondragstart={(e) => order.dragStart(section, course.id, e)}
+				ondragend={order.dragEnd}
+				onkeydown={(e) => {
+					if (e.key === 'ArrowUp') {
+						e.preventDefault();
+						order.move(section, course.id, -1);
+					} else if (e.key === 'ArrowDown') {
+						e.preventDefault();
+						order.move(section, course.id, 1);
+					}
+				}}
 			>
-				<Sidebar.MenuButton
-					isActive={page.url.pathname.startsWith(`/courses/${course.id}`)}
-					tooltipContent={displayName(course)}
+				<GripVerticalIcon />
+			</span>
+			<div class="min-w-0 flex-1">
+				<CourseMenu
+					{course}
+					onRename={editCourse}
+					onMoveUp={index > 0 ? () => order.move(section, course.id, -1) : undefined}
+					onMoveDown={index < rows.length - 1 ? () => order.move(section, course.id, 1) : undefined}
 				>
-					{#snippet child({ props })}
-						<a
-							href={`/courses/${course.id}`}
-							{...props}
-							class:opacity-70={dimmed}
-							title="Drag to reorder"
-						>
-							<CourseDot id={course.id} size="md" class="shrink-0" />
-							<span>{displayName(course)}</span>
-						</a>
-					{/snippet}
-				</Sidebar.MenuButton>
-			</CourseMenu>
+					<Sidebar.MenuButton
+						isActive={page.url.pathname.startsWith(`/courses/${course.id}`)}
+						tooltipContent={displayName(course)}
+					>
+						{#snippet child({ props })}
+							<a
+								href={`/courses/${course.id}`}
+								{...props}
+								draggable="false"
+								ondragstart={(e) => e.preventDefault()}
+								class:opacity-70={dimmed}
+							>
+								<CourseDot id={course.id} size="md" class="shrink-0" />
+								<span>{displayName(course)}</span>
+							</a>
+						{/snippet}
+					</Sidebar.MenuButton>
+				</CourseMenu>
+			</div>
 		</Sidebar.MenuItem>
 	{/each}
 {/snippet}
