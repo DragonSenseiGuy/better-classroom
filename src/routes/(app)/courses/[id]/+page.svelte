@@ -9,6 +9,7 @@
 	import * as Tabs from '#lib/components/ui/tabs/index.js';
 	import * as Item from '#lib/components/ui/item/index.js';
 	import * as Empty from '#lib/components/ui/empty/index.js';
+	import * as Select from '#lib/components/ui/select/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import WorkItem from '#lib/components/work-item.svelte';
 	import Announcement from '#lib/components/announcement.svelte';
@@ -113,29 +114,69 @@
 		| { kind: 'material'; rank: number; at: number; item: (typeof materialQuery.data)[number] };
 	const byRank = (a: Entry, b: Entry) =>
 		a.rank - b.rank || (a.rank === 0 ? a.at - b.at : b.at - a.at);
+	const ALL_TOPICS = 'all';
+	const NO_TOPIC = 'none';
+	type TopicOption = { id: string | undefined; name: string };
+	const topicOf = (e: Entry) => e.item.topicId ?? undefined;
+	let topicFilter = $state(page.url.searchParams.get('topic') ?? ALL_TOPICS);
+	function setTopicFilter(value: string | undefined) {
+		topicFilter = value ?? ALL_TOPICS;
+		setSearchParam('topic', topicFilter, ALL_TOPICS);
+	}
+	const entries = $derived.by((): Entry[] => [
+		...work.map((w) =>
+			isOpen(w)
+				? { kind: 'work' as const, rank: 0, at: w.dueAt ?? Infinity, item: w }
+				: { kind: 'work' as const, rank: 1, at: w.dueAt ?? w.updatedAt, item: w }
+		),
+		...materialQuery.data.map((m) => ({
+			kind: 'material' as const,
+			rank: 1,
+			at: m.updatedAt,
+			item: m
+		}))
+	]);
+	const orphanTopicIds = $derived.by(() => {
+		const known = new Set(topicQuery.data.map((t) => t.id));
+		const ids = new Set<string>();
+		for (const e of entries) {
+			// Null is normalized to undefined so legacy rows can't fall
+			// through the grouping below and vanish from the tab.
+			const id = topicOf(e);
+			if (id !== undefined && !known.has(id)) ids.add(id);
+		}
+		return [...ids].sort();
+	});
+	const topicList: TopicOption[] = $derived([
+		...topicQuery.data.map((t) => ({ id: t.id, name: t.name })),
+		// Incremental syncs only fetch topics on full runs and lookups can
+		// fail, so work can reference topics missing from the local table.
+		// They get their own section instead of being dropped.
+		...orphanTopicIds.map((id) => ({ id, name: 'Untitled topic' })),
+		{ id: undefined, name: 'No topic' }
+	]);
+	const topicKey = (id: string | undefined) => id ?? NO_TOPIC;
+	const effectiveTopic = $derived(
+		topicFilter === ALL_TOPICS || topicList.some((t) => topicKey(t.id) === topicFilter)
+			? topicFilter
+			: ALL_TOPICS
+	);
+	const topicLabel = $derived(
+		effectiveTopic === ALL_TOPICS
+			? 'All topics'
+			: (topicList.find((t) => topicKey(t.id) === effectiveTopic)?.name ?? 'All topics')
+	);
 	const sections = $derived.by(() => {
-		const entries: Entry[] = [
-			...work.map((w) =>
-				isOpen(w)
-					? { kind: 'work' as const, rank: 0, at: w.dueAt ?? Infinity, item: w }
-					: { kind: 'work' as const, rank: 1, at: w.dueAt ?? w.updatedAt, item: w }
-			),
-			...materialQuery.data.map((m) => ({
-				kind: 'material' as const,
-				rank: 1,
-				at: m.updatedAt,
-				item: m
-			}))
-		];
-		const byTopic = groupBy(entries, (e) => e.item.topicId);
-		const list = [
-			...topicQuery.data.map((t) => ({ id: t.id as string | undefined, name: t.name })),
-			{ id: undefined, name: 'No topic' }
-		];
-		return list
+		const byTopic = groupBy(entries, topicOf);
+		const narrowed =
+			effectiveTopic === ALL_TOPICS
+				? topicList
+				: topicList.filter((t) => topicKey(t.id) === effectiveTopic);
+		return narrowed
 			.map((t) => ({ ...t, entries: (byTopic.get(t.id) ?? []).sort(byRank) }))
 			.filter((t) => t.entries.length);
 	});
+	const visibleCount = $derived(sections.reduce((n, s) => n + s.entries.length, 0));
 	const openCount = $derived(work.filter(isOpen).length);
 
 	$effect(() => {
@@ -199,16 +240,58 @@
 			<Tabs.Trigger value="grades">Grades</Tabs.Trigger>
 		</Tabs.List>
 		<Tabs.Content value="classwork" class="mt-4">
-			{#if sections.length === 0}
-				<Empty.Root class="border border-dashed">
-					<Empty.Header>
-						<Empty.Media variant="icon"><InboxIcon /></Empty.Media>
-						<Empty.Title>No classwork yet</Empty.Title>
-						<Empty.Description
-							>Assignments and materials will appear here after the next sync.</Empty.Description
+			{#if topicList.length > 1}
+				<div class="flex flex-wrap items-center gap-2">
+					<Select.Root
+						type="single"
+						value={effectiveTopic}
+						onValueChange={(v) => v && setTopicFilter(v)}
+					>
+						<Select.Trigger class="w-[180px]" aria-label="Filter by topic">
+							{topicLabel}
+						</Select.Trigger>
+						<Select.Content>
+							<Select.Item value={ALL_TOPICS} label="All topics">All topics</Select.Item>
+							{#each topicList as t (topicKey(t.id))}
+								<Select.Item value={topicKey(t.id)} label={t.name}>{t.name}</Select.Item>
+							{/each}
+						</Select.Content>
+					</Select.Root>
+					{#if effectiveTopic !== ALL_TOPICS}
+						<span class="text-sm text-muted-foreground tabular-nums"
+							>{pluralize(visibleCount, 'item')}</span
 						>
-					</Empty.Header>
-				</Empty.Root>
+						<Button variant="ghost" size="sm" onclick={() => setTopicFilter(ALL_TOPICS)}
+							>Clear</Button
+						>
+					{/if}
+				</div>
+			{/if}
+			{#if sections.length === 0}
+				{#if effectiveTopic === ALL_TOPICS}
+					<Empty.Root class="border border-dashed">
+						<Empty.Header>
+							<Empty.Media variant="icon"><InboxIcon /></Empty.Media>
+							<Empty.Title>No classwork yet</Empty.Title>
+							<Empty.Description
+								>Assignments and materials will appear here after the next sync.</Empty.Description
+							>
+						</Empty.Header>
+					</Empty.Root>
+				{:else}
+					<Empty.Root class="border border-dashed">
+						<Empty.Header>
+							<Empty.Media variant="icon"><InboxIcon /></Empty.Media>
+							<Empty.Title>No classwork in this topic</Empty.Title>
+							<Empty.Description>Try another topic or clear the filter.</Empty.Description>
+						</Empty.Header>
+						<Empty.Content>
+							<Button variant="outline" size="sm" onclick={() => setTopicFilter(ALL_TOPICS)}
+								>Clear filter</Button
+							>
+						</Empty.Content>
+					</Empty.Root>
+				{/if}
 			{:else}
 				<div class="divide-y divide-border/60">
 					{#each sections as section (section.id ?? 'none')}
