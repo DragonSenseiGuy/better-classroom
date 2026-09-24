@@ -7,6 +7,7 @@
 	import CourseDot from '#lib/components/course-dot.svelte';
 	import { formatDue } from '#lib/format.ts';
 	import { isNew } from '#lib/work.ts';
+	import { pluralize } from '#lib/text.ts';
 	import type { Selection } from '#lib/selection.svelte.ts';
 	import ArrowUpIcon from '@lucide/svelte/icons/arrow-up';
 	import ArrowDownIcon from '@lucide/svelte/icons/arrow-down';
@@ -16,12 +17,93 @@
 
 	const now = Date.now();
 	const sortedRows = $derived(table.getRowModel().rows);
+	const sortId = $derived(table.atoms.sorting.get()[0]?.id ?? 'dueAt');
 	let scrollRef = $state<HTMLDivElement>();
+
+	const sortOptions = [
+		{ id: 'dueAt', label: 'Due date' },
+		{ id: 'title', label: 'Assignment' },
+		{ id: 'courseName', label: 'Course' },
+		{ id: 'maxPoints', label: 'Points' },
+		{ id: 'status', label: 'Status' }
+	];
 </script>
+
+{#snippet selectRow(id: string, title: string, index: number, className = '')}
+	<Checkbox
+		checked={selection.has(id)}
+		aria-label={`Select ${title}`}
+		class={className}
+		onmousedown={(e: MouseEvent) => e.shiftKey && e.preventDefault()}
+		onclick={(e: MouseEvent) => {
+			e.preventDefault();
+			selection.toggle(index, e.shiftKey);
+		}}
+		onkeydown={(e: KeyboardEvent) => {
+			if (e.key !== ' ') return;
+			e.preventDefault();
+			selection.toggle(index, e.shiftKey);
+		}}
+	/>
+{/snippet}
+
+<!-- Cards for narrow screens: the grid table below needs ~480px and would
+force sideways scrolling on phones. -->
+<div class="mt-4 sm:hidden">
+	<div class="flex items-center justify-between gap-2">
+		<p class="text-xs text-muted-foreground tabular-nums">
+			{pluralize(sortedRows.length, 'assignment')}
+		</p>
+		<label class="flex items-center gap-1.5 text-xs text-muted-foreground">
+			Sort by
+			<select
+				value={sortId}
+				onchange={(e) => table.setSorting([{ id: e.currentTarget.value, desc: false }])}
+				class="rounded-md border border-input bg-background px-1.5 py-1 text-xs text-foreground"
+			>
+				{#each sortOptions as option (option.id)}
+					<option value={option.id}>{option.label}</option>
+				{/each}
+			</select>
+		</label>
+	</div>
+	<ul class="mt-2 flex flex-col gap-2 {selection.size ? 'pb-24' : ''}">
+		{#each sortedRows as row, index (row.id)}
+			{@const w = row.original}
+			<li class="flex gap-2.5 rounded-lg border bg-card px-3 py-2.5">
+				{@render selectRow(w.id, w.title, index, 'mt-0.5')}
+				<div class="min-w-0 flex-1">
+					<a
+						href={`/courses/${w.courseId}/work/${w.id}`}
+						class="line-clamp-2 text-sm font-medium hover:underline"
+						>{w.title}{#if isNew(w, now)}<Badge
+								variant="secondary"
+								class="ml-2 align-middle text-[10px]">New</Badge
+							>{/if}</a
+					>
+					<p class="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+						<CourseDot id={w.courseId} class="shrink-0" /><span class="truncate"
+							>{w.courseName}</span
+						>
+					</p>
+					<p
+						class="mt-0.5 text-xs tabular-nums {w.status === 'missing'
+							? 'text-destructive'
+							: 'text-muted-foreground'}"
+					>
+						{formatDue(w.dueAt, w.hasDueTime)}{#if w.maxPoints}
+							· {w.maxPoints} pts{/if}
+					</p>
+				</div>
+				<div class="shrink-0"><StatusBadge work={w} /></div>
+			</li>
+		{/each}
+	</ul>
+</div>
 
 <div
 	bind:this={scrollRef}
-	class="todo-grid -mx-4 mt-6 h-[calc(100dvh-13rem)] overflow-auto sm:-mx-6 lg:-mx-8"
+	class="todo-grid -mx-4 mt-6 hidden h-[calc(100dvh-13rem)] overflow-auto sm:-mx-6 sm:block lg:-mx-8"
 >
 	<table class="w-full text-sm {selection.size ? 'pb-20' : ''}">
 		<thead class="sticky top-0 z-10 bg-background">
@@ -75,20 +157,7 @@
 			{#snippet children(row, index)}
 				{@const w = row.original}
 				<td class="py-2.5 pl-4 sm:pl-6 lg:pl-8">
-					<Checkbox
-						checked={selection.has(w.id)}
-						aria-label={`Select ${w.title}`}
-						onmousedown={(e: MouseEvent) => e.shiftKey && e.preventDefault()}
-						onclick={(e: MouseEvent) => {
-							e.preventDefault();
-							selection.toggle(index, e.shiftKey);
-						}}
-						onkeydown={(e: KeyboardEvent) => {
-							if (e.key !== ' ') return;
-							e.preventDefault();
-							selection.toggle(index, e.shiftKey);
-						}}
-					/>
+					{@render selectRow(w.id, w.title, index)}
 				</td>
 				<td class="px-2 py-2.5">
 					<a
