@@ -1,9 +1,24 @@
 import { test, expect } from 'bun:test';
-import { applyPendingOrder, moveBefore, moveByDelta } from './course-order.ts';
+import { applyPendingOrder, moveBefore, moveByDelta, moveToPosition } from './course-order.ts';
 
 test('moveBefore relocates before the target', () => {
 	expect(moveBefore(['a', 'b', 'c'], 'c', 'a')).toEqual(['c', 'a', 'b']);
 	expect(moveBefore(['a', 'b', 'c'], 'a', 'c')).toEqual(['b', 'a', 'c']);
+});
+
+test('moveToPosition inserts after the target on bottom-half drops', () => {
+	expect(moveToPosition(['a', 'b', 'c'], 'a', 'c', 'after')).toEqual(['b', 'c', 'a']);
+	expect(moveToPosition(['a', 'b', 'c'], 'c', 'a', 'after')).toEqual(['a', 'c', 'b']);
+	expect(moveToPosition(['a', 'b', 'c'], 'a', 'b', 'after')).toEqual(['b', 'a', 'c']);
+});
+
+test('moveToPosition is noop when already in that exact spot or unknown', () => {
+	const ids = ['a', 'b', 'c'];
+	expect(moveToPosition(ids, 'a', 'b', 'before')).toBe(ids);
+	expect(moveToPosition(ids, 'b', 'a', 'after')).toBe(ids);
+	expect(moveToPosition(ids, 'a', 'a', 'after')).toBe(ids);
+	expect(moveToPosition(ids, 'x', 'a', 'after')).toBe(ids);
+	expect(moveToPosition(ids, 'a', 'x', 'after')).toBe(ids);
 });
 
 test('moveBefore is noop for same or unknown ids', () => {
