@@ -175,6 +175,13 @@ export type Change<T = unknown> = { type: 'insert' | 'update' | 'delete'; key: s
 export type Snapshot = { [K in CollectionName]: RowOf[K][] } & {
 	profile: Profile | null;
 	sync: SyncStatus;
+	/**
+	 * Which record source produced the rows. Session-only sources
+	 * (web-records) cannot see due dates, points, topics, materials or
+	 * submissions, so the UI must render those as unknown rather than
+	 * asserting their absence.
+	 */
+	source: ProviderId | null;
 };
 
 export type ServerEvent =
