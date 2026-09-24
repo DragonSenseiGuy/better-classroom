@@ -17,8 +17,7 @@
 	import FactsGrid from './facts-grid.svelte';
 	import SubmissionFiles from './submission-files.svelte';
 	import SubmissionActions from './submission-actions.svelte';
-	import CommentsSection from './comments-section.svelte';
-	import { classComments as classCommentsApi, comments as commentsApi } from '#lib/api.ts';
+	import PrivateComments from './private-comments.svelte';
 
 	const row = useLiveQuery({
 		query: (q) =>
@@ -40,11 +39,9 @@
 	const privatePlaceholder = $derived(
 		teacherName ? `Add comment to ${teacherName}…` : 'Add a private comment for your teacher…'
 	);
-	const classFallback = $derived(
-		w?.alternateLink
-			? { label: 'Read them in Classroom', href: w.alternateLink }
-			: undefined
-	);
+	// Session-only sync cannot see due dates, points, topics, materials or
+	// submissions: render those as unknown instead of asserting absence.
+	const limited = $derived(page.data.snapshot.source !== 'apps-script');
 	const dueText = $derived(
 		!w || w.dueAt === undefined
 			? 'No due date'
@@ -57,10 +54,13 @@
 			? [
 					{
 						label: 'Due',
-						value: dueText,
+						value: limited ? '–' : dueText,
 						hint: w.dueAt !== undefined ? formatDue(w.dueAt, w.hasDueTime) : undefined
 					},
-					{ label: 'Points', value: w.maxPoints ? String(w.maxPoints) : 'Ungraded' },
+					{
+						label: 'Points',
+						value: w.maxPoints ? String(w.maxPoints) : limited ? '–' : 'Ungraded'
+					},
 					{ label: 'Topic', value: topicQuery.data?.name ?? '–' },
 					{ label: 'Posted', value: formatRelative(w.createdAt) }
 				]
@@ -91,6 +91,18 @@
 
 	<FactsGrid {facts} />
 
+	{#if limited}
+		<div
+			class="mt-6 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-dashed px-3 py-2 text-sm text-muted-foreground"
+		>
+			<span
+				>Session sync can't see due dates, points, attachments or grades. Connect the Apps
+				Script source for the full picture.</span
+			>
+			<Button variant="outline" size="sm" href="/setup">Connect Apps Script</Button>
+		</div>
+	{/if}
+
 	<div class="mt-8 grid gap-10 lg:grid-cols-[3fr_2fr]">
 		<div>
 			{#if w.description}
@@ -107,15 +119,6 @@
 				<h2 class="mt-8 text-base font-semibold tracking-tight">Attachments</h2>
 				<div class="mt-2 max-w-lg"><Attachments items={w.materials} /></div>
 			{/if}
-			<div class="mt-8 max-w-lg">
-				<CommentsSection
-					title="Class comments"
-					work={w}
-					client={classCommentsApi}
-					placeholder="Add a class comment…"
-					fallback={classFallback}
-				/>
-			</div>
 		</div>
 		<aside>
 			<div class="flex items-baseline justify-between gap-2">
@@ -155,12 +158,7 @@
 				<SubmissionActions work={w} submission={sub} />
 			{/if}
 			<Separator class="my-6" />
-			<CommentsSection
-				title="Private comments"
-				work={w}
-				client={commentsApi}
-				placeholder={privatePlaceholder}
-			/>
+			<PrivateComments work={w} teacherName={teacherName} />
 		</aside>
 	</div>
 {/if}

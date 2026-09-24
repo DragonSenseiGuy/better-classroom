@@ -14,6 +14,7 @@ import type {
 	Teacher
 } from '#lib/shared/types.ts';
 import { config, isConfigured } from './config';
+import { recordProvider } from './providers';
 import { open, seal } from './secrets';
 
 type Row = { id: string; data: string };
@@ -185,7 +186,8 @@ export function snapshot(sync: SyncStatus): Snapshot {
 		submissions: listAll('submissions'),
 		dismissals: listAll('dismissals'),
 		profile: getProfile(),
-		sync
+		sync,
+		source: recordProvider()?.status().id ?? null
 	};
 }
 

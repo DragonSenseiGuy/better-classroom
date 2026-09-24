@@ -103,12 +103,6 @@ export type RawSubmission = {
 
 export type RawSubmissionAction = { submission: RawSubmission };
 
-export type CommentThreads = {
-	list(courseId: string, workId: string): Promise<Comment[]>;
-	post(courseId: string, workId: string, text: string): Promise<Comment | null>;
-	remove(courseId: string, workId: string, commentId: string): Promise<void>;
-};
-
 export type RawCourseContent = {
 	partial?: boolean;
 	courseWork?: RawCourseWork[];
@@ -156,15 +150,11 @@ export type Enricher = {
 		courseId: string,
 		workId: string
 	): Promise<{ turnedIn: boolean }>;
-	comments?: CommentThreads;
-	/**
-	 * Class-wide comments on the coursework itself (Classroom's "Class
-	 * comments"). No connected source implements this yet — neither the
-	 * Classroom REST API nor an observed web RPC exposes it — so the route
-	 * reports 501 until one does. Kept on the contract so the UI slot and
-	 * API shape exist when a source lands.
-	 */
-	classComments?: CommentThreads;
+	comments?: {
+		list(courseId: string, workId: string): Promise<Comment[]>;
+		post(courseId: string, workId: string, text: string): Promise<Comment | null>;
+		remove(courseId: string, workId: string, commentId: string): Promise<void>;
+	};
 	attachments?: {
 		list(courseId: string, workId: string): Promise<SubmissionFile[]>;
 		upload(
